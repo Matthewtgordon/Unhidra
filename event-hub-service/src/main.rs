@@ -1,4 +1,4 @@
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::broadcast;
 use uuid::Uuid;
@@ -22,9 +22,12 @@ async fn main() -> Result<()> {
 
         let (read_half, write_half) = stream.into_split();
 
-        let tx_clone = tx.clone();
+        let tx_reader = tx.clone();
+        let tx_writer = tx.clone();
+
         let write_half = Arc::new(tokio::sync::Mutex::new(write_half));
-        let connections_clone = connections.clone();
+        let connections_reader = connections.clone();
+        let connections_writer = connections.clone();
 
         connections
             .lock()
@@ -38,26 +41,25 @@ async fn main() -> Result<()> {
             loop {
                 let n = match reader.read(&mut buf).await {
                     Ok(n) if n == 0 => {
-                        connections_clone.lock().await.remove(&id);
+                        connections_reader.lock().await.remove(&id);
                         break;
                     }
                     Ok(n) => n,
                     Err(_) => {
-                        connections_clone.lock().await.remove(&id);
+                        connections_reader.lock().await.remove(&id);
                         break;
                     }
                 };
 
-                let _ = tx_clone.send((id, buf[..n].to_vec()));
+                let _ = tx_reader.send((id, buf[..n].to_vec()));
             }
         });
 
-        let connections_clone = connections.clone();
         tokio::spawn(async move {
-            let mut rx = tx.subscribe();
+            let mut rx = tx_writer.subscribe();
 
             while let Ok((sender, msg)) = rx.recv().await {
-                let conns = connections_clone.lock().await;
+                let conns = connections_writer.lock().await;
 
                 for (other_id, writer_lock) in conns.iter() {
                     if *other_id == sender {
