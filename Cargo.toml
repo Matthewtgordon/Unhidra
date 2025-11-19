@@ -18,10 +18,10 @@ members = [
 ]
 
 exclude = [
-    "startup-check",
     "unhidra-snapshot-gui",
     "unhidra-snapshots",
     "unhidra-vcs-gui",
+    "startup-check",
 ]
 
 resolver = "3"
