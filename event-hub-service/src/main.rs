@@ -1,5 +1,4 @@
-use tokio::net::TcpListener;
-use tokio::net::TcpStream;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::broadcast;
 use uuid::Uuid;
@@ -10,49 +9,63 @@ use std::sync::Arc;
 async fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:9700").await?;
     let (tx, _) = broadcast::channel::<(Uuid, Vec<u8>)>(100);
-    let connections = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::<Uuid, tokio::sync::Mutex<TcpStream>>::new()));
+
+    let connections = Arc::new(
+        tokio::sync::Mutex::new(
+            std::collections::HashMap::<Uuid, Arc<tokio::sync::Mutex<tokio::net::tcp::OwnedWriteHalf>>>::new()
+        )
+    );
 
     loop {
         let (stream, _) = listener.accept().await?;
         let id = Uuid::new_v4();
 
-        let tx = tx.clone();
-        let connections = connections.clone();
+        let (read_half, write_half) = stream.into_split();
+
+        let tx_clone = tx.clone();
+        let write_half = Arc::new(tokio::sync::Mutex::new(write_half));
+        let connections_clone = connections.clone();
+
+        connections
+            .lock()
+            .await
+            .insert(id, write_half.clone());
 
         tokio::spawn(async move {
-            let mut read_half = stream;
-            let mut write_lock = tokio::sync::Mutex::new(read_half.try_clone().unwrap());
-
-            connections.lock().await.insert(id, write_lock);
-
+            let mut reader = read_half;
             let mut buf = [0u8; 1024];
 
             loop {
-                let n = read_half.read(&mut buf).await.unwrap_or(0);
-                if n == 0 {
-                    connections.lock().await.remove(&id);
-                    break;
-                }
+                let n = match reader.read(&mut buf).await {
+                    Ok(n) if n == 0 => {
+                        connections_clone.lock().await.remove(&id);
+                        break;
+                    }
+                    Ok(n) => n,
+                    Err(_) => {
+                        connections_clone.lock().await.remove(&id);
+                        break;
+                    }
+                };
 
-                let msg = buf[..n].to_vec();
-                let _ = tx.send((id, msg));
+                let _ = tx_clone.send((id, buf[..n].to_vec()));
             }
         });
 
-        let connections = connections.clone();
+        let connections_clone = connections.clone();
         tokio::spawn(async move {
             let mut rx = tx.subscribe();
 
-            while let Ok((sender_id, data)) = rx.recv().await {
-                let conns = connections.lock().await;
+            while let Ok((sender, msg)) = rx.recv().await {
+                let conns = connections_clone.lock().await;
 
-                for (other_id, other_stream_lock) in conns.iter() {
-                    if *other_id == sender_id {
+                for (other_id, writer_lock) in conns.iter() {
+                    if *other_id == sender {
                         continue;
                     }
 
-                    let mut other_stream = other_stream_lock.lock().await;
-                    let _ = other_stream.write_all(&data).await;
+                    let mut writer = writer_lock.lock().await;
+                    let _ = writer.write_all(&msg).await;
                 }
             }
         });
