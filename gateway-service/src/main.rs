@@ -34,61 +34,55 @@ async fn main() {
 
     println!("Gateway running on 0.0.0.0:9000");
 
-    axum::serve(
-        tokio::net::TcpListener::bind("0.0.0.0:9000")
-            .await
-            .unwrap(),
-        app,
-    )
-    .await
-    .unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:9000")
+        .await
+        .unwrap();
+
+    axum::serve(listener, app.into_make_service())
+        .await
+        .unwrap();
 }
 
 async fn ws_handler(
     ws: WebSocketUpgrade,
+    Query(WsQuery { token }): Query<WsQuery>,
     State(state): State<Arc<AppState>>,
-    Query(query): Query<WsQuery>,
 ) -> impl IntoResponse {
-    if !validate_token(&query.token) {
+    // Validate JWT
+    let validation = Validation::default();
+    let key = DecodingKey::from_secret(b"secret");
+
+    let result = decode::<serde_json::Value>(&token, &key, &validation);
+
+    if result.is_err() {
         return axum::response::Html("INVALID TOKEN");
     }
 
-    ws.on_upgrade(move |socket| async move {
-        handle_socket(socket, state).await;
-    })
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-fn validate_token(token: &str) -> bool {
-    decode::<serde_json::Value>(
-        token,
-        &DecodingKey::from_secret("secret".as_ref()),
-        &Validation::default(),
-    )
-    .is_ok()
-}
-
-async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
+async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
+    let (mut write, mut read) = socket.split();
     let mut rx = state.tx.subscribe();
-    let tx = state.tx.clone();
 
-    let (mut sender, mut receiver) = socket.split();
+    // TASK: Read messages → broadcast to all
+    let recv_task = tokio::spawn(async move {
+        while let Some(Ok(Message::Text(text))) = read.next().await {
+            let _ = state.tx.send(text);
+        }
+    });
 
+    // TASK: Broadcast → send to this client
     let send_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
-            if sender.send(Message::Text(msg)).await.is_err() {
+            if write.send(Message::Text(msg)).await.is_err() {
                 break;
             }
         }
     });
 
-    let recv_task = tokio::spawn(async move {
-        while let Some(Ok(Message::Text(text))) = receiver.next().await {
-            let _ = tx.send(text);
-        }
-    });
-
     tokio::select! {
-        _ = send_task => {}
-        _ = recv_task => {}
+        _ = recv_task => {},
+        _ = send_task => {},
     }
 }
