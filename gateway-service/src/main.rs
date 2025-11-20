@@ -19,7 +19,7 @@ struct AppState {
     tx: broadcast::Sender<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct WsQuery {
     token: String,
 }
@@ -47,15 +47,18 @@ async fn ws_handler(
     State(state): State<Arc<AppState>>,
     Query(query): Query<WsQuery>,
 ) -> Response {
+
+    // DEBUG: show the raw token the gateway received
+    println!("GATEWAY RECEIVED TOKEN: {}", query.token);
+
     let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "supersecret".into());
 
-    // VALIDATION FOR jsonwebtoken 7.x–8.x
     let mut validation = Validation::default();
     validation.leeway = 300;
-    validation.validate_exp = true;  // allow expiration checking
-    validation.iss = None;          // DISABLE issuer check
-    validation.sub = None;          // DISABLE subject check
-    validation.aud = None;          // DISABLE audience check
+    validation.validate_exp = true;
+    validation.iss = None;
+    validation.sub = None;
+    validation.aud = None;
 
     let token_check = decode::<serde_json::Value>(
         &query.token,
@@ -63,9 +66,12 @@ async fn ws_handler(
         &validation,
     );
 
-    if token_check.is_err() {
+    if let Err(e) = &token_check {
+        println!("JWT ERROR: {}", e);
         return (StatusCode::UNAUTHORIZED, "INVALID TOKEN").into_response();
     }
+
+    println!("TOKEN VERIFIED OK");
 
     ws.on_upgrade(move |socket| async move {
         handle_socket(socket, state).await;
