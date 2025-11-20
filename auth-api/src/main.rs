@@ -1,30 +1,66 @@
-use axum::{
-    Router,
-    routing::{post, get},
-    Json,
-};
-use serde_json::json;
-use tokio::net::TcpListener;
+use axum::{Router, routing::post, Json};
+use axum::extract::State;
+use serde::{Deserialize, Serialize};
+use jsonwebtoken::{encode, EncodingKey, Header};
+use std::sync::Arc;
 
-async fn login_handler() -> &'static str {
-    "login endpoint"
+#[derive(Clone)]
+struct AppState {
+    jwt_secret: String,
 }
 
-async fn health_handler() -> Json<serde_json::Value> {
-    Json(json!({ "status": "ok" }))
+#[derive(Deserialize)]
+struct LoginRequest {
+    username: String,
+    password: String,
+}
+
+#[derive(Serialize)]
+struct LoginResponse {
+    token: String,
+}
+
+#[derive(Serialize)]
+struct Claims {
+    sub: String,
+    exp: usize,
+}
+
+async fn login_handler(
+    State(app): State<Arc<AppState>>,
+    Json(payload): Json<LoginRequest>,
+) -> Json<LoginResponse> {
+    if payload.username != "user" || payload.password != "password" {
+        return Json(LoginResponse { token: "INVALID".to_string() });
+    }
+
+    let exp = chrono::Utc::now().timestamp() as usize + 3600;
+    let claims = Claims { sub: payload.username, exp };
+
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(app.jwt_secret.as_bytes()),
+    ).unwrap();
+
+    Json(LoginResponse { token })
 }
 
 #[tokio::main]
 async fn main() {
-    println!("Auth API running on 0.0.0.0:9200");
+    let state = Arc::new(AppState {
+        jwt_secret: "supersecretjwtkey".into(),
+    });
 
     let app = Router::new()
         .route("/login", post(login_handler))
-        .route("/health", get(health_handler));
+        .with_state(state);
 
-    // Axum 0.7 style listener + serve
-    let listener = TcpListener::bind("0.0.0.0:9200").await.unwrap();
-    axum::serve(listener, app)
-        .await
-        .unwrap();
+    println!("Auth API running on 0.0.0.0:9200");
+    axum::serve(
+        tokio::net::TcpListener::bind("0.0.0.0:9200").await.unwrap(),
+        app
+    )
+    .await
+    .unwrap();
 }
