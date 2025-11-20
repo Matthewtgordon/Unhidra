@@ -1,5 +1,5 @@
 U-Chat
-Lightweight modular Rust chat stack built from small independent services.
+    Lightweight modular Rust chat stack built from small independent services.
 
 Architecture  
     auth-api  
