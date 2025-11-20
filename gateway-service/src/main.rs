@@ -49,10 +49,10 @@ async fn ws_handler(
 ) -> Response {
     let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "supersecret".into());
 
-    let mut validation = Validation::default();
-    validation.validate_issuer = false;     // <-- CRITICAL FIX
-    validation.validate_aud = false;        // <-- Just in case
-    validation.insecure_disable_signature_validation = false;
+    // Correct Validation for jsonwebtoken 9.x
+    let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
+    validation.validate_exp = true;
+    validation.required_spec_claims.clear();   // <-- KEY FIX
 
     let check = decode::<serde_json::Value>(
         &query.token,
