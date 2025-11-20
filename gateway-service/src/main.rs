@@ -3,7 +3,8 @@ use axum::{
         ws::{Message, WebSocket},
         Query, State, WebSocketUpgrade,
     },
-    response::{Html, IntoResponse},
+    http::StatusCode,
+    response::Response,
     routing::get,
     Router,
 };
@@ -45,7 +46,7 @@ async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
     Query(query): Query<WsQuery>,
-) -> impl IntoResponse {
+) -> Response {
     let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "supersecret".into());
 
     let validation = Validation::default();
@@ -57,7 +58,7 @@ async fn ws_handler(
     );
 
     if token_check.is_err() {
-        return Html("INVALID TOKEN");
+        return (StatusCode::UNAUTHORIZED, "INVALID TOKEN").into_response();
     }
 
     ws.on_upgrade(move |socket| async move {
@@ -67,7 +68,6 @@ async fn ws_handler(
 
 async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = socket.split();
-
     let mut rx = state.tx.subscribe();
 
     let send_task = tokio::spawn(async move {
