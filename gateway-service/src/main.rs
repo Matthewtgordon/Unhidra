@@ -9,7 +9,7 @@ use axum::{
     Router,
 };
 use futures_util::{SinkExt, StreamExt};
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -49,20 +49,16 @@ async fn ws_handler(
 ) -> Response {
     let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "supersecret".into());
 
-    // Minimal validation: signature + expiration only
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.validate_exp = true;
-    validation.validate_nbf = false;
-    validation.set_audience(&[]);
-    validation.set_issuer(&[]);
+    // Basic validation only
+    let validation = Validation::default();
 
-    let token_check = decode::<serde_json::Value>(
+    let check = decode::<serde_json::Value>(
         &query.token,
         &DecodingKey::from_secret(secret.as_bytes()),
         &validation,
     );
 
-    if token_check.is_err() {
+    if check.is_err() {
         return (StatusCode::UNAUTHORIZED, "INVALID TOKEN").into_response();
     }
 
