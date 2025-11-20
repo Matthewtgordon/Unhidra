@@ -35,7 +35,7 @@ async fn login_handler(
     }
 
     let exp = chrono::Utc::now().timestamp() as usize + 3600;
-    let claims = Claims { sub: payload.username, exp };
+    let claims = Claims { sub: payload.username.clone(), exp };
 
     let token = encode(
         &Header::default(),
@@ -48,8 +48,11 @@ async fn login_handler(
 
 #[tokio::main]
 async fn main() {
+    let secret = std::env::var("JWT_SECRET")
+        .unwrap_or_else(|_| "supersecret".into());
+
     let state = Arc::new(AppState {
-        jwt_secret: "supersecretjwtkey".into(),
+        jwt_secret: secret,
     });
 
     let app = Router::new()
