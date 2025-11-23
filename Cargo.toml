@@ -19,6 +19,8 @@ members = [
     "core",
     "storage",
     "net",
+    "e2ee",
+    "client-e2ee",
 
     # ML infrastructure
     "ml-bridge",
