@@ -40,19 +40,32 @@
 
 ## Phase 2: Token-Gated HTTP Route Foundation with JWT
 
-**Status**: In Progress (Background)
+**Status**: Completed (Integrated with Phase 3)
 
-### Expected Components (Not Yet Committed)
+### Completed Tasks
 
-- [ ] JWT token generation on successful login
-- [ ] JWT validation middleware for protected routes
-- [ ] Token expiration and refresh logic
-- [ ] Integration with auth-api login flow
+- [x] JWT token generation on successful login
+  - File: `auth-api/src/handlers.rs`
+  - Uses shared `jwt-common` crate for token generation
+  - Includes `sub`, `exp`, `iat`, `display_name` claims
 
-### Notes
+- [x] Shared JWT crate (`jwt-common`)
+  - File: `jwt-common/src/lib.rs`
+  - Unified token generation and validation
+  - Shared between auth-api and gateway-service
+  - 6 unit tests for token handling
 
-Phase 2 is completing in the background. Phase 3 WebSocket implementation includes
-JWT validation that will need to be unified with Phase 2 once committed.
+- [x] Token claims structure
+  - `sub`: Subject (username)
+  - `exp`: Expiration timestamp
+  - `iat`: Issued-at timestamp
+  - `room`: Optional room assignment
+  - `display_name`: Optional display name
+
+### Integration
+
+The auth-api now generates proper JWT tokens that gateway-service can validate.
+Both services use the same `JWT_SECRET` environment variable.
 
 ---
 
@@ -70,7 +83,7 @@ JWT validation that will need to be unified with Phase 2 once committed.
 - [x] Token authentication via Sec-WebSocket-Protocol header
   - Browsers cannot set Authorization headers in WebSocket JS API
   - Token passed as subprotocol: `new WebSocket(url, ["bearer", token])`
-  - Server validates JWT before completing upgrade
+  - Server validates JWT using shared `jwt-common` crate
   - HTTP 403 returned for invalid/missing tokens
 
 - [x] Room-based pub/sub with DashMap
@@ -105,7 +118,7 @@ JWT validation that will need to be unified with Phase 2 once committed.
 Client                    Gateway Service                    Room
   |                             |                              |
   |-- GET /ws (token in header) |                              |
-  |                             |-- Validate JWT               |
+  |                             |-- Validate JWT (jwt-common)  |
   |                             |-- Check Origin               |
   |                             |-- Join/Create Room --------->|
   |<-- WebSocket Upgrade -------|                              |
@@ -119,7 +132,7 @@ Client                    Gateway Service                    Room
 ### Security Improvements
 
 - Token in header (not URL query) - avoids logging sensitive data
-- JWT signature and expiration validation
+- JWT signature and expiration validation (shared jwt-common)
 - Origin checking prevents CSWSH attacks
 - Room isolation - users only receive messages for their room
 - TLS required in production (wss://)
@@ -128,25 +141,39 @@ Client                    Gateway Service                    Room
 
 | File | Change |
 |------|--------|
-| `gateway-service/Cargo.toml` | Added dashmap, tracing, tracing-subscriber |
+| `jwt-common/` | New crate - shared JWT handling |
+| `gateway-service/Cargo.toml` | Added dashmap, tracing, jwt-common |
 | `gateway-service/src/main.rs` | Modular architecture, CORS, health check |
-| `gateway-service/src/state.rs` | New - AppState with RoomsMap |
-| `gateway-service/src/ws_handler.rs` | New - WebSocket handler with auth |
+| `gateway-service/src/state.rs` | AppState with TokenService |
+| `gateway-service/src/ws_handler.rs` | WebSocket handler with jwt-common |
+| `auth-api/Cargo.toml` | Added jwt-common, tracing |
+| `auth-api/src/handlers.rs` | JWT token generation on login |
+| `auth-api/src/main.rs` | Updated to use handlers module |
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GATEWAY_BIND_ADDR` | Server bind address | `0.0.0.0:9000` |
-| `JWT_SECRET` | JWT signing secret | `supersecret` |
+| `JWT_SECRET` | JWT signing secret (shared) | `supersecret` |
+| `GATEWAY_BIND_ADDR` | Gateway bind address | `0.0.0.0:9000` |
 | `ALLOWED_ORIGINS` | Comma-separated allowed origins | `http://localhost:3000,http://127.0.0.1:3000` |
+| `AUTH_BIND_ADDR` | Auth API bind address | `0.0.0.0:9200` |
+| `AUTH_DB_PATH` | SQLite database path | `/opt/unhidra/auth.db` |
 
 ---
 
-## Pending Phase 2/3 Integration Items
+## Optional Enhancements (Future Work)
 
-The following items require Phase 2 completion before integration:
+### EF-CHAT-01: Room Message History Endpoint
+- REST API: `GET /rooms/{id}/messages?limit=N`
+- Store messages in database on broadcast
+- Index on (room_id, timestamp)
 
-1. **EF-SEC-02**: Unified token validation - Share JWT validation logic between auth-api and gateway-service
-2. **Token generation alignment** - Ensure auth-api generates tokens with claims expected by gateway-service
-3. **Refresh token support** - WebSocket reconnection with new tokens on expiry
+### EF-CHAT-02: Typing Indicator Broadcast
+- Ephemeral "typing" notifications via WebSocket
+- Not persisted to database
+
+### EF-OBS-02: Prometheus Metrics
+- Active connection count gauge
+- Message rate histogram
+- Room count distribution

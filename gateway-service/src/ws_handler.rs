@@ -12,8 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use futures_util::{SinkExt, StreamExt};
-use jsonwebtoken::{decode, DecodingKey, Validation};
-use serde::{Deserialize, Serialize};
+// jwt-common crate is used via state.token_service
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
@@ -24,23 +23,11 @@ use crate::state::AppState;
 /// If clients can't keep up, oldest messages are dropped.
 const CHANNEL_CAPACITY: usize = 100;
 
-/// JWT claims structure for token validation.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TokenClaims {
-    /// Subject (usually username or user ID)
-    pub sub: String,
-    /// Expiration timestamp
-    pub exp: usize,
-    /// Optional room/channel override
-    #[serde(default)]
-    pub room: Option<String>,
-}
-
 /// WebSocket upgrade handler for GET /ws endpoint.
 ///
 /// # Authentication Flow
 /// 1. Extract token from Sec-WebSocket-Protocol header (browser WebSocket API limitation)
-/// 2. Validate JWT signature and expiration
+/// 2. Validate JWT signature and expiration using jwt-common
 /// 3. Check Origin header against allowed origins (CSRF protection)
 /// 4. If valid, upgrade to WebSocket and join the appropriate room
 ///
@@ -80,8 +67,8 @@ pub async fn ws_handler(
         return (StatusCode::FORBIDDEN, "Missing authentication token").into_response();
     }
 
-    // Validate the JWT token
-    let claims = match validate_token(&token, &state.jwt_secret) {
+    // Validate the JWT token using shared jwt-common TokenService
+    let claims = match state.token_service.validate(&token) {
         Ok(claims) => claims,
         Err(e) => {
             warn!(error = %e, "WebSocket rejected: invalid token");
@@ -89,10 +76,8 @@ pub async fn ws_handler(
         }
     };
 
-    // Determine room ID from token claims
-    let room_id = claims
-        .room
-        .unwrap_or_else(|| format!("user:{}", claims.sub));
+    // Determine room ID from token claims using jwt-common's room_id() helper
+    let room_id = claims.room_id();
 
     info!(
         user = claims.sub,
@@ -111,18 +96,12 @@ pub async fn ws_handler(
         .clone();
 
     // Respond with the accepted subprotocol (required by WebSocket spec)
-    let response_protocol = HeaderValue::from_str("bearer").ok();
+    let _response_protocol = HeaderValue::from_str("bearer").ok();
 
     // Complete the WebSocket upgrade
-    let upgrade = if let Some(proto) = response_protocol {
-        ws.protocols(["bearer"]).on_upgrade(move |socket| {
-            handle_socket(socket, room_id, sender, rooms, claims.sub)
-        })
-    } else {
-        ws.on_upgrade(move |socket| handle_socket(socket, room_id, sender, rooms, claims.sub))
-    };
-
-    upgrade
+    ws.protocols(["bearer"]).on_upgrade(move |socket| {
+        handle_socket(socket, room_id, sender, rooms, claims.sub)
+    })
 }
 
 /// Extracts the token from Sec-WebSocket-Protocol header.
@@ -144,21 +123,6 @@ fn extract_token_from_protocol(header: &str) -> String {
     }
 
     String::new()
-}
-
-/// Validates a JWT token and extracts claims.
-fn validate_token(token: &str, secret: &str) -> Result<TokenClaims, jsonwebtoken::errors::Error> {
-    let mut validation = Validation::default();
-    validation.leeway = 60; // 60 second leeway for clock skew
-    validation.validate_exp = true;
-
-    let token_data = decode::<TokenClaims>(
-        token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &validation,
-    )?;
-
-    Ok(token_data.claims)
 }
 
 /// Handles an active WebSocket connection.
@@ -209,9 +173,8 @@ async fn handle_socket(
                 }
             }
             Ok(Message::Binary(data)) => {
-                // Convert binary to base64 text for broadcast
-                // Future: Could add binary message type handling
-                let encoded = base64_encode(&data);
+                // Convert binary to hex for broadcast
+                let encoded = hex_encode(&data);
                 let _ = sender.send(format!("{{\"type\":\"binary\",\"data\":\"{}\"}}", encoded));
             }
             Ok(Message::Ping(data)) => {
@@ -252,15 +215,9 @@ async fn handle_socket(
     }
 }
 
-/// Simple base64 encoding for binary messages.
-fn base64_encode(data: &[u8]) -> String {
-    use std::io::Write;
-    let mut output = Vec::new();
-    let _ = write!(output, "{}", data.len());
-    // Simple hex encoding as fallback (proper base64 would need a crate)
-    data.iter()
-        .map(|b| format!("{:02x}", b))
-        .collect::<String>()
+/// Simple hex encoding for binary messages.
+fn hex_encode(data: &[u8]) -> String {
+    data.iter().map(|b| format!("{:02x}", b)).collect::<String>()
 }
 
 #[cfg(test)]
@@ -291,5 +248,11 @@ mod tests {
     fn test_extract_token_bearer_only() {
         let token = extract_token_from_protocol("bearer");
         assert_eq!(token, "");
+    }
+
+    #[test]
+    fn test_hex_encode() {
+        let data = vec![0xDE, 0xAD, 0xBE, 0xEF];
+        assert_eq!(hex_encode(&data), "deadbeef");
     }
 }

@@ -11,9 +11,10 @@
 
 ## Project Structure
 
-- `auth-api/` - HTTP-based authentication API (Argon2id password hashing)
-- `auth-service/` - WebSocket-based auth service
+- `auth-api/` - HTTP-based authentication API (Argon2id password hashing, JWT generation)
 - `gateway-service/` - WebSocket gateway with token validation and room-based pub/sub
+- `jwt-common/` - Shared JWT token handling crate (used by auth-api and gateway-service)
+- `auth-service/` - WebSocket-based auth service
 - `chat-service/` - Chat functionality
 - `presence-service/` - User presence tracking
 - `history-service/` - Chat history
@@ -22,6 +23,7 @@
 ## Security Guidelines
 
 - Use Argon2id for all password hashing (see `auth-api/src/services/auth_service.rs`)
+- Use `jwt-common` crate for all JWT operations (unified token handling)
 - Never commit secrets or credentials
 - Follow OWASP security best practices
 - Use constant-time comparisons for sensitive data
@@ -33,6 +35,36 @@
 - Run tests before committing: `cargo test -p <package-name>`
 - Apply database migrations from `migrations/` folder
 - Use `PasswordService::new_dev()` for faster testing (dev parameters only)
+- Set `JWT_SECRET` environment variable (same for all services)
+
+## JWT Common Crate
+
+The `jwt-common` crate provides unified JWT handling:
+
+```rust
+use jwt_common::{Claims, TokenService, DEFAULT_EXPIRATION_SECS};
+
+// Create service (reads JWT_SECRET from env)
+let service = TokenService::from_env();
+
+// Generate token
+let claims = Claims::new("username", DEFAULT_EXPIRATION_SECS, None);
+let token = service.generate(&claims)?;
+
+// Validate token
+let validated = service.validate(&token)?;
+println!("User: {}, Room: {}", validated.sub, validated.room_id());
+```
+
+### Token Claims Structure
+
+| Claim | Type | Required | Description |
+|-------|------|----------|-------------|
+| `sub` | String | Yes | Subject (username) |
+| `exp` | usize | Yes | Expiration timestamp |
+| `iat` | usize | Yes | Issued-at timestamp |
+| `room` | String | No | Custom room assignment |
+| `display_name` | String | No | User display name |
 
 ## Gateway Service (WebSocket)
 
@@ -40,7 +72,7 @@
 
 The gateway-service provides real-time bidirectional WebSocket communication:
 
-- **Token Auth**: JWT validated via `Sec-WebSocket-Protocol` header
+- **Token Auth**: JWT validated via `Sec-WebSocket-Protocol` header using `jwt-common`
 - **Room-Based**: Clients join rooms based on token claims (user ID or custom room)
 - **Pub/Sub**: DashMap + tokio::broadcast for efficient fan-out messaging
 - **Cleanup**: Automatic resource cleanup when rooms become empty
@@ -50,55 +82,59 @@ The gateway-service provides real-time bidirectional WebSocket communication:
 | File | Purpose |
 |------|---------|
 | `gateway-service/src/main.rs` | Server setup, CORS, routing |
-| `gateway-service/src/state.rs` | AppState with RoomsMap |
-| `gateway-service/src/ws_handler.rs` | WebSocket handler with auth |
+| `gateway-service/src/state.rs` | AppState with TokenService and RoomsMap |
+| `gateway-service/src/ws_handler.rs` | WebSocket handler with jwt-common validation |
 
-### Environment Variables
+## Auth API
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GATEWAY_BIND_ADDR` | Server bind address | `0.0.0.0:9000` |
-| `JWT_SECRET` | JWT signing secret | `supersecret` |
-| `ALLOWED_ORIGINS` | Comma-separated allowed origins | `http://localhost:3000,http://127.0.0.1:3000` |
+### Key Files
 
-### WebSocket Client Usage
+| File | Purpose |
+|------|---------|
+| `auth-api/src/main.rs` | Server setup, routing |
+| `auth-api/src/handlers.rs` | Login handler with JWT generation |
+| `auth-api/src/services/auth_service.rs` | Argon2id password hashing |
+
+## Environment Variables
+
+| Variable | Service | Description | Default |
+|----------|---------|-------------|---------|
+| `JWT_SECRET` | All | JWT signing secret (shared) | `supersecret` |
+| `GATEWAY_BIND_ADDR` | gateway-service | Server bind address | `0.0.0.0:9000` |
+| `ALLOWED_ORIGINS` | gateway-service | Comma-separated allowed origins | `http://localhost:3000,http://127.0.0.1:3000` |
+| `AUTH_BIND_ADDR` | auth-api | Server bind address | `0.0.0.0:9200` |
+| `AUTH_DB_PATH` | auth-api | SQLite database path | `/opt/unhidra/auth.db` |
+
+## Client Integration Example
 
 ```javascript
-// Browser client
-const token = "your-jwt-token";
-const ws = new WebSocket("wss://gateway:9000/ws", ["bearer", token]);
+// 1. Login to get JWT token
+const response = await fetch('http://localhost:9200/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: 'user', password: 'pass' })
+});
+const { token } = await response.json();
+
+// 2. Connect WebSocket with token
+const ws = new WebSocket("ws://localhost:9000/ws", ["bearer", token]);
 
 ws.onopen = () => console.log("Connected");
 ws.onmessage = (e) => console.log("Received:", e.data);
 ws.send("Hello room!");
 ```
 
-### JWT Token Requirements
-
-The gateway expects JWT tokens with these claims:
-
-```json
-{
-  "sub": "username",
-  "exp": 1234567890,
-  "room": "optional-room-id"
-}
-```
-
-- `sub` (required): User identifier, used as room ID if no `room` claim
-- `exp` (required): Expiration timestamp
-- `room` (optional): Custom room assignment, defaults to `user:{sub}`
-
 ## Phase Status
 
 - **Phase 1**: Completed - Argon2id password hashing
-- **Phase 2**: In Progress (background) - JWT token generation
+- **Phase 2**: Completed - JWT token generation (integrated with Phase 3)
 - **Phase 3**: Completed - WebSocket fabric hardening
 
-### Phase 2/3 Integration Items (Pending)
+All phases are now integrated via the shared `jwt-common` crate.
 
-The following require Phase 2 completion:
+## Optional Enhancements (Future Work)
 
-1. **INT-01**: Unify JWT validation logic across services
-2. **INT-02**: Align token claims between auth-api and gateway-service
-3. **INT-03**: WebSocket reconnection flow with token refresh
+- **EF-CHAT-01**: Room message history endpoint
+- **EF-CHAT-02**: Typing indicator broadcast
+- **EF-OBS-02**: Prometheus metrics for WebSocket
+- **EF-SEC-01**: Rate limiting on login endpoint

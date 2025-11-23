@@ -4,7 +4,7 @@
 //! bidirectional communication between browser clients and IoT devices.
 //!
 //! # Security Features
-//! - JWT token authentication via Sec-WebSocket-Protocol header
+//! - JWT token authentication via Sec-WebSocket-Protocol header (using jwt-common)
 //! - Origin validation for CSRF protection
 //! - Room-based isolation with broadcast channels
 //! - TLS encryption required in production (wss://)
@@ -29,8 +29,6 @@ use ws_handler::ws_handler;
 struct Config {
     /// Server bind address
     bind_addr: String,
-    /// JWT secret for token validation
-    jwt_secret: String,
     /// Allowed origins for WebSocket connections (comma-separated)
     allowed_origins: Vec<String>,
 }
@@ -39,9 +37,6 @@ impl Config {
     fn from_env() -> Self {
         let bind_addr =
             std::env::var("GATEWAY_BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:9000".to_string());
-
-        let jwt_secret =
-            std::env::var("JWT_SECRET").unwrap_or_else(|_| "supersecret".to_string());
 
         let allowed_origins = std::env::var("ALLOWED_ORIGINS")
             .map(|s| s.split(',').map(|o| o.trim().to_string()).collect())
@@ -55,7 +50,6 @@ impl Config {
 
         Self {
             bind_addr,
-            jwt_secret,
             allowed_origins,
         }
     }
@@ -69,10 +63,8 @@ async fn main() {
     let config = Config::from_env();
 
     // Create shared application state
-    let state = Arc::new(AppState::new(
-        config.jwt_secret,
-        config.allowed_origins.clone(),
-    ));
+    // JWT_SECRET is read by AppState::from_env via jwt-common's TokenService
+    let state = Arc::new(AppState::from_env(config.allowed_origins.clone()));
 
     // Configure CORS for WebSocket handshake
     // Note: WebSocket connections use GET method for upgrade

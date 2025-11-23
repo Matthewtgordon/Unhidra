@@ -4,6 +4,7 @@
 //! including room-based broadcast channels for real-time messaging.
 
 use dashmap::DashMap;
+use jwt_common::TokenService;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -22,8 +23,8 @@ pub struct AppState {
     /// - Value: Broadcast channel sender for that room
     pub rooms: Arc<RoomsMap>,
 
-    /// JWT secret for token validation.
-    pub jwt_secret: String,
+    /// JWT token service for validation (from jwt-common crate).
+    pub token_service: TokenService,
 
     /// Allowed origins for WebSocket connections (CSRF protection).
     pub allowed_origins: Vec<String>,
@@ -31,25 +32,31 @@ pub struct AppState {
 
 impl AppState {
     /// Creates a new AppState with the given configuration.
-    pub fn new(jwt_secret: String, allowed_origins: Vec<String>) -> Self {
+    pub fn new(token_service: TokenService, allowed_origins: Vec<String>) -> Self {
         Self {
             rooms: Arc::new(DashMap::new()),
-            jwt_secret,
+            token_service,
             allowed_origins,
         }
+    }
+
+    /// Creates AppState from environment variables.
+    ///
+    /// Reads JWT_SECRET for token validation.
+    /// WARNING: In production, always set JWT_SECRET to a strong random value.
+    pub fn from_env(allowed_origins: Vec<String>) -> Self {
+        Self::new(TokenService::from_env(), allowed_origins)
     }
 
     /// Creates AppState with default development configuration.
     ///
     /// WARNING: Only use in development. Uses weak JWT secret.
+    #[allow(dead_code)]
     pub fn new_dev() -> Self {
-        Self::new(
-            "supersecret".to_string(),
-            vec![
-                "http://localhost:3000".to_string(),
-                "http://127.0.0.1:3000".to_string(),
-            ],
-        )
+        Self::from_env(vec![
+            "http://localhost:3000".to_string(),
+            "http://127.0.0.1:3000".to_string(),
+        ])
     }
 
     /// Checks if an origin is allowed for WebSocket connections.
@@ -69,7 +76,7 @@ mod tests {
     #[test]
     fn test_origin_check() {
         let state = AppState::new(
-            "secret".to_string(),
+            TokenService::new("secret"),
             vec!["https://example.com".to_string()],
         );
 
@@ -79,7 +86,7 @@ mod tests {
 
     #[test]
     fn test_empty_origins_allows_all() {
-        let state = AppState::new("secret".to_string(), vec![]);
+        let state = AppState::new(TokenService::new("secret"), vec![]);
         assert!(state.is_origin_allowed("https://any-origin.com"));
     }
 }

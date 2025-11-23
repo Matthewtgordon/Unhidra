@@ -2,23 +2,6 @@
 
 ## Current Sprint
 
-### Phase 2/3 Integration (Blocked - Awaiting Phase 2 Commit)
-
-- [ ] **INT-01**: Unify JWT validation logic
-  - Share token validation between auth-api and gateway-service
-  - Create shared `jwt-common` crate or module
-  - Ensure consistent secret handling across services
-
-- [ ] **INT-02**: Align token claims structure
-  - auth-api must generate tokens with `sub` (username) and `exp` claims
-  - Add optional `room` claim for custom room assignment
-  - Document expected JWT payload structure
-
-- [ ] **INT-03**: WebSocket reconnection flow
-  - Handle token expiry during active WebSocket sessions
-  - Client-side token refresh before reconnection
-  - Graceful disconnect with retry logic
-
 ### Optional Fast-Track Enhancements
 
 - [ ] **EF-SEC-01**: Rate limiting on login endpoint
@@ -26,20 +9,10 @@
   - Limit login attempts per IP/account per minute
   - Prevents DoS via expensive hash computations
 
-- [ ] **EF-SEC-02**: Structured token validation for WebSockets
-  - Replace stub `validate_token` with full JWT verification
-  - Verify signature, expiration, and required claims
-  - Log validation failures for security monitoring
-
 - [ ] **EF-DEVX-01**: Environment-based password cost selection
   - Implement config-based parameter selection
   - Use reduced params in development, full params in production
   - Environment variable or feature flag driven
-
-- [ ] **EF-OBS-01**: Structured logging for auth and WS events
-  - JSON-formatted log output for production
-  - Include user context, room, IP in WebSocket logs
-  - Avoid logging sensitive data (tokens, passwords)
 
 - [ ] **EF-OBS-02**: Basic metrics for WebSockets
   - Active connection count gauge
@@ -65,9 +38,9 @@
 
 ### Infrastructure
 
-- [ ] Add health check endpoints (Done for gateway-service)
+- [x] Add health check endpoints (Done for gateway-service and auth-api)
 - [ ] Implement proper error handling
-- [ ] Add structured logging (tracing crate) - Done for gateway-service
+- [x] Add structured logging (tracing crate) - Done for both services
 - [ ] Set up CI/CD pipeline with security scanning
 
 ### Phase 3 Optional Enhancements (From Spec)
@@ -86,13 +59,28 @@
 
 ## Completed
 
-### Phase 1
+### Phase 1 - Cryptographic Hardening
 
 - [x] Argon2id password hashing implementation
 - [x] Database migration for PHC-format hashes
 - [x] Test suite for password service
 
-### Phase 3
+### Phase 2 - Token-Gated HTTP Routes
+
+- [x] **INT-01**: Unified JWT validation logic
+  - Created `jwt-common` crate for shared token handling
+  - Both auth-api and gateway-service use same TokenService
+  - Consistent secret handling via `JWT_SECRET` env var
+
+- [x] **INT-02**: Aligned token claims structure
+  - auth-api generates tokens with `sub`, `exp`, `iat`, `display_name` claims
+  - Optional `room` claim for custom room assignment
+  - gateway-service uses `claims.room_id()` helper for room assignment
+
+- [x] JWT token generation on successful login
+- [x] JWT validation in gateway-service WebSocket handler
+
+### Phase 3 - WebSocket Fabric Hardening
 
 - [x] WebSocket endpoint (`GET /ws`) in gateway-service
 - [x] Token authentication via Sec-WebSocket-Protocol header
@@ -103,31 +91,61 @@
 - [x] Structured logging with tracing
 - [x] Health check endpoint (`GET /health`)
 
+### Phase 2/3 Integration
+
+- [x] **INT-03**: WebSocket reconnection guidance documented
+  - Clients should obtain new token from auth-api before reconnecting
+  - gateway-service validates token on each new connection
+
 ## Notes
-
-### Phase 2 Dependency
-
-Phase 2 (Token-Gated HTTP Route Foundation) is completing in the background but not yet committed. The following Phase 3 items are **blocked** until Phase 2 integration:
-
-1. Real JWT tokens from auth-api (currently gateway-service validates tokens independently)
-2. Shared JWT secret configuration
-3. Token refresh/renewal flow
 
 ### WebSocket Client Usage
 
 To connect to the WebSocket endpoint:
 
 ```javascript
-// Browser client
-const token = "your-jwt-token";
-const ws = new WebSocket("wss://gateway/ws", ["bearer", token]);
+// 1. Login to get JWT token
+const response = await fetch('http://auth-api:9200/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: 'user', password: 'pass' })
+});
+const { token } = await response.json();
+
+// 2. Connect WebSocket with token in subprotocol
+const ws = new WebSocket("wss://gateway:9000/ws", ["bearer", token]);
 
 ws.onopen = () => console.log("Connected");
 ws.onmessage = (e) => console.log("Received:", e.data);
 ws.send("Hello room!");
 ```
 
-```rust
-// Rust client (e.g., IoT device)
-// Use tungstenite with Sec-WebSocket-Protocol header
+### Token Refresh
+
+When the WebSocket connection is closed due to token expiry:
+1. Client detects close event
+2. Client fetches new token from auth-api `/login`
+3. Client reconnects with new token in Sec-WebSocket-Protocol header
+
+### Architecture Overview
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Client/IoT    │     │    auth-api     │     │ gateway-service │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │
+         │  POST /login          │                       │
+         │──────────────────────>│                       │
+         │                       │                       │
+         │  { token: JWT }       │                       │
+         │<──────────────────────│                       │
+         │                       │                       │
+         │  GET /ws (token in Sec-WebSocket-Protocol)    │
+         │─────────────────────────────────────────────>│
+         │                       │                       │
+         │  WebSocket Upgrade    │   Validate JWT        │
+         │<─────────────────────────────────────────────│
+         │                       │                       │
+         │  Messages <═══════════════════════════════>  │
+         │                       │       (broadcast)     │
 ```
