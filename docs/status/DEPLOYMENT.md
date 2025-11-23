@@ -622,12 +622,87 @@ WantedBy=multi-user.target
 
 ---
 
+---
+
+## Kubernetes Deployment (Helm)
+
+Production Kubernetes deployment using Helm charts.
+
+### Prerequisites
+
+- Kubernetes 1.25+
+- Helm 3.x
+- kubectl configured
+
+### Install with Helm
+
+```bash
+# Add Bitnami repo for dependencies
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
+# Install Unhidra
+cd helm/unhidra
+helm dependency update
+helm install unhidra . --namespace unhidra --create-namespace \
+  --set oidc.clientSecret=your-oidc-secret \
+  --set postgresql.auth.postgresPassword=your-db-password \
+  --set redis.auth.password=your-redis-password
+```
+
+### Configuration
+
+Edit `helm/unhidra/values.yaml`:
+
+```yaml
+# E2EE enforcement
+e2ee:
+  enforced: true
+
+# OIDC SSO
+oidc:
+  enabled: true
+  issuer: "https://your-idp.com"
+  clientId: "unhidra"
+
+# Scaling
+replicaCount: 3
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+```
+
+### Verify Deployment
+
+```bash
+# Check pods
+kubectl get pods -n unhidra
+
+# Check services
+kubectl get svc -n unhidra
+
+# View logs
+kubectl logs -f deployment/unhidra-gateway -n unhidra
+```
+
+---
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.14.0 | 2025-11 | Phase 14: Tauri Desktop Client |
+| 0.13.0 | 2025-11 | Phase 13: Channels, Threads, E2EE Files |
+| 0.12.0 | 2025-11 | Phase 12: MQTT Bridge |
+| 0.11.0 | 2025-11 | Phase 11: Helm Charts for Kubernetes |
+| 0.10.0 | 2025-11 | Phase 10: Immutable Audit Log |
+| 0.9.0 | 2025-11 | Phase 9: Redis Streams |
+| 0.8.0 | 2025-11 | Phase 8: OIDC SSO + WebAuthn |
+| 0.7.0 | 2025-11 | Phase 7: E2EE Double Ratchet |
+| 0.5.0 | 2024-11 | Phase 5: Rate Limiting & Devices |
 | 0.4.0 | 2024-11 | Phase 4: ESP32 firmware with WSS |
-| 0.3.0 | 2024-11 | Phase 3: Gateway WSS (in progress) |
+| 0.3.0 | 2024-11 | Phase 3: Gateway WSS |
 | 0.2.0 | 2024-11 | Phase 2: ML IPC sidecar |
 | 0.1.0 | 2024-11 | Phase 1: Argon2id password hashing |
 | 0.0.1 | 2024-11 | Initial release |

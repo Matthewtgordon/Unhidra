@@ -1,14 +1,19 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Unhidra Core Library
+//!
+//! Shared utilities and security primitives for the Unhidra platform.
+//!
+//! # Modules
+//!
+//! - [`crypto`] - End-to-end encryption with Double Ratchet protocol
+//! - [`audit`] - Immutable audit logging (requires `postgres` feature)
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod crypto;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+#[cfg(feature = "postgres")]
+pub mod audit;
+
+// Re-exports for convenience
+pub use crypto::{E2eeError, EncryptedMessage, KeyPair, PreKeyBundle, Ratchet};
+
+/// Core library version
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

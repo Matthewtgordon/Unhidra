@@ -30,6 +30,9 @@ members = [
     "unhidra-gui",
     "unhidra-vcs-gui",
     "startup-check",
+
+    # Phase 14: Tauri Desktop Client
+    "unhidra-desktop/src-tauri",
 ]
 
 # Shared dependency versions for consistency
@@ -42,3 +45,25 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
 thiserror = "2.0"
 chrono = "0.4"
+
+# Phase 7: E2EE Double Ratchet
+snow = { version = "0.9.6", features = ["default"] }
+chacha20poly1305 = "0.10"
+rand = "0.8"
+once_cell = "1.19"
+base64 = "0.22"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Phase 8: OIDC + WebAuthn
+openidconnect = { version = "3.3", features = ["reqwest"] }
+webauthn-rs = "0.5"
+rustls = "0.23"
+
+# Phase 9: Redis Streams
+redis = { version = "0.25", features = ["streams", "tokio-comp", "connection-manager"] }
+
+# Phase 10: Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json"] }
+
+# Phase 12: MQTT Bridge
+rumqttc = { version = "0.24", features = ["websocket"] }

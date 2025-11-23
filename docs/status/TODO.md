@@ -2,6 +2,52 @@
 
 ## Recently Completed
 
+### Phase 14: Tauri Desktop Client ✅
+- [x] Tauri 2.0 application setup
+- [x] OIDC authentication flow
+- [x] WebSocket chat connection
+- [x] Client-side E2EE with Noise Protocol
+- [x] System tray and notifications
+- [x] Auto-update support
+
+### Phase 13: Channels, Threads, E2EE File Sharing ✅
+- [x] Channels database schema
+- [x] Channel membership with roles
+- [x] Threaded messages
+- [x] E2EE file attachments
+- [x] Read receipts and reactions
+
+### Phase 12: MQTT-over-WebSocket Bridge ✅
+- [x] MQTT bridge in gateway-service
+- [x] TLS client certificate auth
+- [x] E2EE for device messages
+
+### Phase 11: Helm Charts for Kubernetes ✅
+- [x] Chart.yaml with PostgreSQL/Redis dependencies
+- [x] values.yaml with comprehensive config
+- [x] Gateway and service deployments
+- [x] HPA, PDB, NetworkPolicies
+
+### Phase 10: Immutable Audit Log ✅
+- [x] Audit log migration with immutability triggers
+- [x] core/src/audit.rs module
+- [x] Query methods and comprehensive actions
+
+### Phase 9: Redis Streams ✅
+- [x] StreamPublisher and StreamConsumer
+- [x] Consumer groups for multi-node
+- [x] Presence and typing indicators
+
+### Phase 8: OIDC SSO + WebAuthn ✅
+- [x] OIDC provider integration
+- [x] WebAuthn/Passkey registration and auth
+- [x] Secure state management
+
+### Phase 7: E2EE Double Ratchet ✅
+- [x] Noise Protocol (XX pattern)
+- [x] Pre-key bundles and handshake
+- [x] Encrypted message envelopes
+
 ### Phase 5: Rate Limiting & Device Registration ✅
 - [x] Gateway service rate limiting (per-IP, per-user, per-connection)
 - [x] Auth API rate limiting (login, registration, device registration)

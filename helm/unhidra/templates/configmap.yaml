@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "unhidra.fullname" . }}-config
+  labels:
+    {{- include "unhidra.labels" . | nindent 4 }}
+data:
+  # E2EE Configuration
+  E2EE_ENFORCED: "{{ .Values.e2ee.enforced }}"
+  E2EE_KEY_ROTATION_DAYS: "{{ .Values.e2ee.keyRotationDays }}"
+
+  # OIDC Configuration
+  {{- if .Values.oidc.enabled }}
+  OIDC_ENABLED: "true"
+  OIDC_ISSUER: "{{ .Values.oidc.issuer }}"
+  OIDC_CLIENT_ID: "{{ .Values.oidc.clientId }}"
+  OIDC_SCOPES: "{{ join " " .Values.oidc.scopes }}"
+  {{- end }}
+
+  # WebAuthn Configuration
+  {{- if .Values.webauthn.enabled }}
+  WEBAUTHN_ENABLED: "true"
+  WEBAUTHN_RP_ID: "{{ .Values.webauthn.rpId }}"
+  WEBAUTHN_RP_NAME: "{{ .Values.webauthn.rpName }}"
+  WEBAUTHN_RP_ORIGIN: "{{ .Values.webauthn.rpOrigin }}"
+  {{- end }}
+
+  # Service URLs
+  DATABASE_URL: "postgresql://postgres@{{ include "unhidra.postgresql.host" . }}:5432/{{ .Values.postgresql.auth.database }}"
+  REDIS_URL: "redis://{{ include "unhidra.redis.host" . }}:6379"
+
+  # Audit Configuration
+  AUDIT_ENABLED: "{{ .Values.audit.enabled }}"
+  AUDIT_RETENTION_DAYS: "{{ .Values.audit.retentionDays }}"
+
+  # MQTT Configuration
+  {{- if .Values.mqtt.enabled }}
+  MQTT_ENABLED: "true"
+  MQTT_BROKER: "{{ .Values.mqtt.broker }}"
+  MQTT_CLIENT_ID: "{{ .Values.mqtt.clientId }}"
+  MQTT_TLS_ENABLED: "{{ .Values.mqtt.tlsEnabled }}"
+  {{- end }}
+
+  # FIPS Mode
+  FIPS_MODE: "{{ .Values.fipsMode }}"
