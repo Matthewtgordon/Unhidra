@@ -1,19 +1,15 @@
-//! Unhidra Core Library
+//! Core shared types and utilities for Unhidra services
 //!
-//! Shared utilities and security primitives for the Unhidra platform.
-//!
-//! # Modules
-//!
-//! - [`crypto`] - End-to-end encryption with Double Ratchet protocol
-//! - [`audit`] - Immutable audit logging (requires `postgres` feature)
+//! This crate provides common models, traits, and utilities used across
+//! all Unhidra microservices to ensure consistency and reduce duplication.
 
-pub mod crypto;
+pub mod models;
+pub mod error;
+pub mod traits;
+pub mod config;
 
-#[cfg(feature = "postgres")]
-pub mod audit;
-
-// Re-exports for convenience
-pub use crypto::{E2eeError, EncryptedMessage, KeyPair, PreKeyBundle, Ratchet};
-
-/// Core library version
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+// Re-export commonly used types
+pub use models::*;
+pub use error::{UnhidraError, Result};
+pub use traits::*;
+pub use config::ServiceConfig;

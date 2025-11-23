@@ -10,14 +10,75 @@
 | 2024-11 | Phase 3 | WSS Gateway Security | ✅ Complete |
 | 2024-11 | Phase 4 | ESP32 Firmware & WSS Integration | ✅ Complete |
 | 2024-11 | Phase 5 | Rate Limiting & Device Registration | ✅ Complete |
-| 2025-11 | Phase 7 | E2EE Double Ratchet (Noise Protocol) | ✅ Complete |
-| 2025-11 | Phase 8 | OIDC SSO + WebAuthn (Passkeys) | ✅ Complete |
-| 2025-11 | Phase 9 | Redis Streams (Multi-Node Ready) | ✅ Complete |
-| 2025-11 | Phase 10 | Immutable Audit Log | ✅ Complete |
-| 2025-11 | Phase 11 | Helm Charts for Kubernetes | ✅ Complete |
-| 2025-11 | Phase 12 | MQTT-over-WebSocket Bridge | ✅ Complete |
-| 2025-11 | Phase 13 | Channels, Threads, E2EE File Sharing | ✅ Complete |
-| 2025-11 | Phase 14 | Tauri Desktop Client | ✅ Complete |
+| 2025-11 | Phase 6 | Codebase Enhancement & CI/CD | ✅ Complete |
+
+---
+
+## Phase 6: Codebase Enhancement & CI/CD
+
+**Status**: ✅ Completed
+
+### Overview
+
+Comprehensive codebase enhancement including CI/CD pipeline, shared models library, group chat functionality, and history service with database integration.
+
+### Completed Tasks
+
+- [x] **Core Crate Enhancement**
+  - Shared data models (User, Message, Group, Device, Presence)
+  - Common error handling with `UnhidraError`
+  - Repository traits for CRUD operations
+  - Service configuration utilities
+  - Health check traits
+  - Files: `core/src/{models,error,traits,config}.rs`
+
+- [x] **CI/CD Pipeline**
+  - GitHub Actions workflow for CI
+  - Format checking with `cargo fmt`
+  - Lint checking with `cargo clippy`
+  - Test execution with `cargo test`
+  - Security audit with `cargo-audit`
+  - Documentation generation
+  - Code coverage with `cargo-llvm-cov`
+  - Docker image building
+  - Release workflow with GitHub releases
+  - Files: `.github/workflows/{ci,release}.yml`
+
+- [x] **Linting Configuration**
+  - Workspace-level Rust lints (forbid unsafe_code)
+  - Clippy configuration with pedantic, nursery lints
+  - Rustfmt configuration
+  - Files: `.rustfmt.toml`, `clippy.toml`, `Cargo.toml`
+
+- [x] **History Service Enhancement**
+  - SQLite database integration with SQLx 0.8
+  - Message persistence and retrieval
+  - Room-based message queries
+  - User message queries
+  - Full-text search functionality
+  - Pagination support
+  - Health check endpoint
+  - Files: `history-service/src/{main,db,handlers,models}.rs`
+
+- [x] **Chat Service with Group Chat**
+  - Group creation and management
+  - Member roles (owner, admin, moderator, member)
+  - Group membership management (join, leave, add, remove)
+  - Real-time message broadcasting (DashMap + broadcast channels)
+  - Message persistence with SQLite
+  - User's groups listing
+  - Health check endpoint
+  - Files: `chat-service/src/{main,db,handlers,models,state}.rs`
+
+### Infrastructure Improvements
+
+| Improvement | Description |
+|-------------|-------------|
+| Shared models | Consistent data types across services |
+| CI/CD automation | Automated testing, linting, security |
+| Database persistence | SQLite with migrations |
+| Group chat | Multi-user room-based messaging |
+| Code quality | Workspace-wide linting rules |
 
 ---
 
@@ -192,217 +253,82 @@ Implemented secure ESP32 firmware using the modern `esp-idf-svc` ecosystem for I
 
 ---
 
-## Phase 14: Tauri Desktop Client
-
-**Status**: ✅ Completed
-
-### Overview
-
-Cross-platform desktop application using Tauri 2.0 with E2EE, OIDC login, WebSocket chat, and auto-updates.
-
-### Completed Tasks
-
-- [x] Created `unhidra-desktop` crate with Tauri 2.0
-- [x] Implemented OIDC authentication flow
-- [x] WebSocket chat connection manager
-- [x] Client-side E2EE using Noise Protocol
-- [x] System tray integration
-- [x] Cross-platform builds (Windows, macOS, Linux)
-- [x] Auto-update support
-
-### Files Added
-
-- `unhidra-desktop/src-tauri/Cargo.toml`
-- `unhidra-desktop/src-tauri/tauri.conf.json`
-- `unhidra-desktop/src-tauri/src/main.rs`
-- `unhidra-desktop/src-tauri/src/auth.rs`
-- `unhidra-desktop/src-tauri/src/chat.rs`
-- `unhidra-desktop/src-tauri/src/e2ee.rs`
-
 ---
 
-## Phase 13: Channels, Threads, E2EE File Sharing
+## Phase 7-13: Enterprise Features
 
-**Status**: ✅ Completed
+### Phase 7: E2EE Core ✅
 
-### Overview
+**Status**: Completed (2025-11)
 
-Group communication with channels, threaded conversations, and encrypted file attachments.
+- Created `e2ee` crate with:
+  - X3DH key agreement protocol
+  - Double Ratchet algorithm (forward secrecy)
+  - X25519 key exchange
+  - ChaCha20Poly1305 encryption
+  - Session management with `SessionStore`
+- Created `client-e2ee` crate for client-side operations
+- E2EE message envelope format
 
-### Completed Tasks
+### Phase 8: SSO + WebAuthn ✅
 
-- [x] Channels database schema (public, private, direct)
-- [x] Channel membership with roles (owner, admin, member)
-- [x] Messages with thread support (parent_id, thread_root_id)
-- [x] Message reactions
-- [x] E2EE file attachments with separate encryption keys
-- [x] Read receipts
-- [x] Pinned messages
-- [x] Channel invites with codes
+**Status**: Completed (2025-11)
 
-### Migration
+- OpenID Connect SSO (`auth-api/src/oidc.rs`)
+  - Okta, Azure AD, Keycloak, Google support
+  - PKCE security
+  - Provider auto-discovery
+- WebAuthn/Passkey (`auth-api/src/webauthn_service.rs`)
+  - Passwordless login
+  - Platform authenticators
+  - Credential management
 
-- `migrations/004_channels_threads.sql`
+### Phase 9: Redis Streams ✅
 
----
+**Status**: Completed (2025-11)
 
-## Phase 12: MQTT-over-WebSocket Bridge
+- Redis Streams backend (`chat-service/src/redis_streams.rs`)
+  - Consumer groups for reliability
+  - Message history with XREVRANGE
+  - Horizontal scaling support
 
-**Status**: ✅ Completed
+### Phase 10: Audit Logging ✅
 
-### Overview
+**Status**: Completed (2025-11)
 
-Secure MQTT connectivity for IoT devices with TLS client certificates and E2EE message forwarding.
+- Migration `003_audit_log.sql`
+- Audit module (`core/src/audit.rs`)
+  - 30+ audit actions
+  - `AuditLogger` trait
+  - Memory and Redis backends
 
-### Completed Tasks
+### Phase 11: Helm Chart ✅
 
-- [x] MQTT bridge in gateway-service
-- [x] TLS client certificate authentication
-- [x] Topic-based device routing
-- [x] E2EE encryption for device messages
-- [x] Automatic ratchet provisioning
-- [x] QoS support (0, 1, 2)
+**Status**: Completed (2025-11)
 
-### Files Added
+- Helm chart at `helm/unhidra/`
+  - PostgreSQL + Redis dependencies
+  - HPA and PDB configurations
+  - Comprehensive values.yaml
 
-- `gateway-service/src/mqtt/mod.rs`
-- `gateway-service/src/mqtt/mqtt_bridge.rs`
+### Phase 12: MQTT IoT Bridge ✅
 
----
+**Status**: Completed (2025-11)
 
-## Phase 11: Helm Charts for Kubernetes
+- MQTT Bridge (`gateway-service/src/mqtt_bridge.rs`)
+  - Topic-based routing
+  - Device status tracking
+  - TLS mutual auth ready
 
-**Status**: ✅ Completed
+### Phase 13: Channels & Threads ✅
 
-### Overview
+**Status**: Completed (2025-11)
 
-Production-ready Kubernetes deployment with Helm charts, including PostgreSQL and Redis dependencies.
-
-### Completed Tasks
-
-- [x] Chart.yaml with Bitnami dependencies
-- [x] values.yaml with comprehensive configuration
-- [x] Gateway deployment with TLS
-- [x] Service definitions
-- [x] ConfigMaps for environment
-- [x] HPA and PDB support
-- [x] Network policies
-- [x] ServiceMonitor for Prometheus
-
-### Files Added
-
-- `helm/unhidra/Chart.yaml`
-- `helm/unhidra/values.yaml`
-- `helm/unhidra/templates/_helpers.tpl`
-- `helm/unhidra/templates/gateway-deployment.yaml`
-- `helm/unhidra/templates/configmap.yaml`
-
----
-
-## Phase 10: Immutable Audit Log
-
-**Status**: ✅ Completed
-
-### Overview
-
-Tamper-evident logging for all security-relevant events with database triggers preventing modification.
-
-### Completed Tasks
-
-- [x] Audit log database schema
-- [x] Immutability triggers (prevent UPDATE/DELETE)
-- [x] Comprehensive audit actions enum
-- [x] Actor types (user, device, service, system)
-- [x] IP and user-agent tracking
-- [x] Request correlation IDs
-- [x] Query methods by actor, action, time range
-
-### Files Added
-
-- `migrations/003_audit_log.sql`
-- `core/src/audit.rs`
-
----
-
-## Phase 9: Redis Streams (Multi-Node Ready)
-
-**Status**: ✅ Completed
-
-### Overview
-
-Redis Streams for scalable message distribution across multiple service instances using consumer groups.
-
-### Completed Tasks
-
-- [x] StreamPublisher for message broadcasting
-- [x] StreamConsumer with consumer groups
-- [x] Message types (text, file, reaction, system)
-- [x] Presence updates via Redis Streams
-- [x] Typing indicators
-- [x] Automatic message acknowledgment
-
-### Files Added
-
-- `chat-service/src/streams/mod.rs`
-- `chat-service/src/streams/redis_stream.rs`
-
----
-
-## Phase 8: OIDC SSO + WebAuthn (Passkeys)
-
-**Status**: ✅ Completed
-
-### Overview
-
-Enterprise SSO via OpenID Connect and passwordless authentication with WebAuthn/FIDO2.
-
-### Completed Tasks
-
-- [x] OIDC provider integration (any compliant IdP)
-- [x] Authorization code flow with PKCE
-- [x] User info retrieval
-- [x] WebAuthn/Passkey registration
-- [x] WebAuthn authentication
-- [x] Secure state management
-
-### Files Added
-
-- `auth-api/src/oidc/mod.rs`
-- `auth-api/src/webauthn/mod.rs`
-
----
-
-## Phase 7: E2EE Double Ratchet (Noise Protocol)
-
-**Status**: ✅ Completed
-
-### Overview
-
-End-to-end encryption using the Noise Protocol framework with forward secrecy. Server never sees plaintext.
-
-### Completed Tasks
-
-- [x] Noise XX pattern implementation
-- [x] Pre-key bundle generation and exchange
-- [x] Session handshake (initiator/responder)
-- [x] Message encryption/decryption
-- [x] Encrypted message envelope with sequence numbers
-- [x] Base64 serialization for transport
-
-### Files Added
-
-- `core/src/crypto/mod.rs`
-- `core/src/crypto/e2ee.rs`
-- `core/src/lib.rs` (updated)
-
-### Security Improvements (Phase 7)
-
-| Improvement | Description |
-|-------------|-------------|
-| Forward secrecy | Compromise of keys doesn't reveal past messages |
-| X25519 key exchange | Modern elliptic curve cryptography |
-| ChaCha20-Poly1305 | High-performance AEAD encryption |
-| BLAKE2s | Fast cryptographic hashing |
+- Migration `004_channels_threads.sql`
+  - Channels with public/private/direct types
+  - Threads with reply counts
+  - File uploads with encryption
+  - Reactions, read receipts, typing
 
 ---
 
@@ -410,11 +336,10 @@ End-to-end encryption using the Noise Protocol framework with forward secrecy. S
 
 | Metric | Value |
 |--------|-------|
-| Phases Completed | 13 (1-5, 7-14) |
-| New Crates Added | 4 (ml-bridge, jwt-common enhanced, firmware, unhidra-desktop) |
-| Security Improvements | 40+ |
-| Test Coverage | Unit tests for auth, ML bridge, gateway, crypto |
-| Supported Platforms | Linux (backend), ESP32 family (firmware), Windows/macOS/Linux (desktop) |
+| Phases Completed | 6 |
+| New Crates Added | 4 (ml-bridge, jwt-common, firmware, core enhanced) |
+| Security Improvements | 25+ |
+| Test Coverage | Unit tests for auth, ML bridge, gateway, history, chat |
+| Supported Platforms | Linux (backend), ESP32 family (firmware) |
 | Docker Support | Full compose with Prometheus/Grafana |
-| Kubernetes Support | Helm charts with PostgreSQL/Redis |
-| E2EE | Full end-to-end encryption with Noise Protocol |
+| CI/CD | GitHub Actions (lint, test, security, coverage, Docker) |

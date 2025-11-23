@@ -38,6 +38,9 @@ helm.sh/chart: {{ include "unhidra.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.commonLabels }}
+{{ toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -60,37 +63,44 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-PostgreSQL host
+Auth API fullname
 */}}
-{{- define "unhidra.postgresql.host" -}}
-{{- if .Values.postgresql.enabled }}
-{{- printf "%s-postgresql" (include "unhidra.fullname" .) }}
-{{- else }}
-{{- .Values.postgresql.external.host }}
-{{- end }}
+{{- define "unhidra.authApi.fullname" -}}
+{{- printf "%s-auth-api" (include "unhidra.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
-Redis host
+Gateway Service fullname
 */}}
-{{- define "unhidra.redis.host" -}}
+{{- define "unhidra.gatewayService.fullname" -}}
+{{- printf "%s-gateway" (include "unhidra.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Chat Service fullname
+*/}}
+{{- define "unhidra.chatService.fullname" -}}
+{{- printf "%s-chat" (include "unhidra.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Redis connection URL
+*/}}
+{{- define "unhidra.redisUrl" -}}
 {{- if .Values.redis.enabled }}
-{{- printf "%s-redis-master" (include "unhidra.fullname" .) }}
+{{- printf "redis://%s-redis-master:6379" .Release.Name }}
 {{- else }}
-{{- .Values.redis.external.host }}
+{{- .Values.externalRedis.url }}
 {{- end }}
 {{- end }}
 
 {{/*
-Container image
+PostgreSQL connection URL
 */}}
-{{- define "unhidra.image" -}}
-{{- $registry := .Values.global.imageRegistry | default "" }}
-{{- $repository := .repository }}
-{{- $tag := .tag | default $.Chart.AppVersion }}
-{{- if $registry }}
-{{- printf "%s/%s:%s" $registry $repository $tag }}
+{{- define "unhidra.postgresUrl" -}}
+{{- if .Values.postgresql.enabled }}
+{{- printf "postgres://%s:%s@%s-postgresql:5432/%s" .Values.postgresql.auth.username "$(POSTGRES_PASSWORD)" .Release.Name .Values.postgresql.auth.database }}
 {{- else }}
-{{- printf "%s:%s" $repository $tag }}
+{{- .Values.externalPostgresql.url }}
 {{- end }}
 {{- end }}

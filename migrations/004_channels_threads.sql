@@ -1,163 +1,203 @@
--- Phase 13: Channels, Threads, and E2EE File Sharing
--- Created: 2025-11-23
--- Purpose: Group communication with channels and threaded conversations
+-- Channels and Threads Migration
+-- Supports enterprise chat features: channels, threads, file uploads, reactions
 
--- Channels table for group communication
+-- ============================================================================
+-- Channels
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS channels (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
-    -- Channel type: public, private, direct (1:1)
-    channel_type VARCHAR(20) NOT NULL DEFAULT 'public',
-    -- Organization/workspace ID (for multi-tenant)
-    org_id UUID,
-    -- Creator
-    created_by UUID NOT NULL,
-    -- Settings
-    is_archived BOOLEAN DEFAULT false,
-    is_read_only BOOLEAN DEFAULT false,
-    -- E2EE settings
-    e2ee_required BOOLEAN DEFAULT true,
-    -- Timestamps
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    channel_type TEXT NOT NULL DEFAULT 'public',  -- 'public', 'private', 'direct'
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+    archived_at TEXT,
+    metadata TEXT  -- JSON for custom attributes
 );
 
-CREATE INDEX IF NOT EXISTS idx_channels_org ON channels(org_id);
 CREATE INDEX IF NOT EXISTS idx_channels_type ON channels(channel_type);
 CREATE INDEX IF NOT EXISTS idx_channels_created_by ON channels(created_by);
 
--- Channel membership
+-- Channel Members
 CREATE TABLE IF NOT EXISTS channel_members (
-    channel_id UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL,
-    -- Role in channel
-    role VARCHAR(20) NOT NULL DEFAULT 'member', -- owner, admin, member
-    -- Notification settings
-    muted BOOLEAN DEFAULT false,
-    muted_until TIMESTAMPTZ,
-    -- Timestamps
-    joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_read_at TIMESTAMPTZ,
-    PRIMARY KEY (channel_id, user_id)
+    channel_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member',  -- 'owner', 'admin', 'member', 'guest'
+    joined_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+    last_read_at TEXT,
+    notifications TEXT NOT NULL DEFAULT 'all',  -- 'all', 'mentions', 'none'
+    PRIMARY KEY (channel_id, user_id),
+    FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_channel_members_user ON channel_members(user_id);
 
--- Messages table with channel and thread support
+-- ============================================================================
+-- Messages (enhanced)
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    -- Channel (null for direct messages)
-    channel_id UUID REFERENCES channels(id) ON DELETE CASCADE,
-    -- For direct messages without channel
-    sender_id UUID NOT NULL,
-    recipient_id UUID,
-    -- Thread support: parent message ID
-    parent_id UUID REFERENCES messages(id) ON DELETE SET NULL,
-    thread_root_id UUID REFERENCES messages(id) ON DELETE SET NULL,
-    -- Content (E2EE encrypted)
-    content_encrypted BYTEA NOT NULL,
-    content_nonce BYTEA,
-    -- Message type
-    message_type VARCHAR(20) NOT NULL DEFAULT 'text', -- text, file, system, reaction
-    -- Metadata (encrypted)
-    metadata_encrypted BYTEA,
-    -- Editing
-    edited_at TIMESTAMPTZ,
-    -- Deletion (soft delete)
-    deleted_at TIMESTAMPTZ,
-    deleted_by UUID,
-    -- Timestamps
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id TEXT PRIMARY KEY NOT NULL,
+    channel_id TEXT NOT NULL,
+    sender_id TEXT NOT NULL,
+    thread_id TEXT,  -- NULL for top-level messages, parent message ID for replies
+    content TEXT NOT NULL,  -- Encrypted content if E2EE enabled
+    content_type TEXT NOT NULL DEFAULT 'text',  -- 'text', 'file', 'system', 'e2ee'
+    edited_at TEXT,  -- Last edit timestamp
+    deleted_at TEXT,  -- Soft delete
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+    metadata TEXT,  -- JSON: mentions, formatting, etc.
+    FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
-CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_root_id);
-CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
+CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id);
 
--- Reactions to messages
-CREATE TABLE IF NOT EXISTS message_reactions (
-    message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL,
-    -- Reaction emoji or custom reaction ID
-    reaction VARCHAR(50) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (message_id, user_id, reaction)
+-- ============================================================================
+-- Threads
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS threads (
+    id TEXT PRIMARY KEY NOT NULL,
+    channel_id TEXT NOT NULL,
+    parent_message_id TEXT NOT NULL,
+    reply_count INTEGER NOT NULL DEFAULT 0,
+    participant_count INTEGER NOT NULL DEFAULT 0,
+    last_reply_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+    FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_message_id) REFERENCES messages(id) ON DELETE CASCADE
 );
 
--- Read receipts
+CREATE INDEX IF NOT EXISTS idx_threads_channel ON threads(channel_id);
+CREATE INDEX IF NOT EXISTS idx_threads_parent ON threads(parent_message_id);
+
+-- Thread Participants
+CREATE TABLE IF NOT EXISTS thread_participants (
+    thread_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    joined_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+    last_read_at TEXT,
+    PRIMARY KEY (thread_id, user_id),
+    FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE
+);
+
+-- ============================================================================
+-- File Uploads
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS file_uploads (
+    id TEXT PRIMARY KEY NOT NULL,
+    message_id TEXT,
+    channel_id TEXT NOT NULL,
+    uploader_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    original_filename TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    mime_type TEXT NOT NULL,
+    storage_path TEXT NOT NULL,  -- S3 key or local path
+    storage_backend TEXT NOT NULL DEFAULT 'local',  -- 'local', 's3', 'minio'
+    checksum TEXT NOT NULL,  -- SHA-256 hash
+    encrypted INTEGER NOT NULL DEFAULT 0,  -- Client-side E2EE
+    encryption_key_id TEXT,  -- Reference to key used for encryption
+    thumbnail_path TEXT,  -- For images/videos
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+    deleted_at TEXT,
+    metadata TEXT,  -- JSON: dimensions, duration, etc.
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE SET NULL,
+    FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_files_channel ON file_uploads(channel_id);
+CREATE INDEX IF NOT EXISTS idx_files_uploader ON file_uploads(uploader_id);
+CREATE INDEX IF NOT EXISTS idx_files_message ON file_uploads(message_id);
+
+-- ============================================================================
+-- Reactions
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS reactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    emoji TEXT NOT NULL,  -- Unicode emoji or custom emoji ID
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+    UNIQUE(message_id, user_id, emoji),
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id);
+CREATE INDEX IF NOT EXISTS idx_reactions_user ON reactions(user_id);
+
+-- ============================================================================
+-- Read Receipts
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS read_receipts (
-    channel_id UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL,
-    last_read_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
-    last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    channel_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    last_read_message_id TEXT NOT NULL,
+    last_read_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+    PRIMARY KEY (channel_id, user_id),
+    FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+    FOREIGN KEY (last_read_message_id) REFERENCES messages(id) ON DELETE CASCADE
+);
+
+-- ============================================================================
+-- Typing Indicators (transient, typically in Redis)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS typing_indicators (
+    channel_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    started_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
     PRIMARY KEY (channel_id, user_id)
 );
 
--- E2EE File attachments
-CREATE TABLE IF NOT EXISTS file_attachments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    -- File metadata (encrypted)
-    filename_encrypted BYTEA NOT NULL,
-    mime_type_encrypted BYTEA,
-    size_bytes BIGINT NOT NULL,
-    -- Storage location (encrypted URL)
-    storage_url_encrypted BYTEA NOT NULL,
-    -- E2EE key for file (encrypted with message key)
-    file_key_encrypted BYTEA NOT NULL,
-    -- Checksum of encrypted file
-    checksum_sha256 VARCHAR(64) NOT NULL,
-    -- Timestamps
-    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- ============================================================================
+-- User Preferences
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id TEXT PRIMARY KEY NOT NULL,
+    theme TEXT DEFAULT 'system',  -- 'light', 'dark', 'system'
+    language TEXT DEFAULT 'en',
+    timezone TEXT DEFAULT 'UTC',
+    notification_sound INTEGER DEFAULT 1,
+    desktop_notifications INTEGER DEFAULT 1,
+    email_notifications INTEGER DEFAULT 0,
+    message_preview INTEGER DEFAULT 1,
+    compact_mode INTEGER DEFAULT 0,
+    metadata TEXT,  -- JSON for additional preferences
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'utc'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_file_attachments_message ON file_attachments(message_id);
+-- ============================================================================
+-- Views for Common Queries
+-- ============================================================================
 
--- Channel invites
-CREATE TABLE IF NOT EXISTS channel_invites (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    channel_id UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-    created_by UUID NOT NULL,
-    -- Invite code (for shareable links)
-    invite_code VARCHAR(32) UNIQUE NOT NULL,
-    -- Limits
-    max_uses INT,
-    uses INT DEFAULT 0,
-    expires_at TIMESTAMPTZ,
-    -- Status
-    is_active BOOLEAN DEFAULT true,
-    -- Timestamps
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- Unread message count per channel per user
+CREATE VIEW IF NOT EXISTS unread_counts AS
+SELECT
+    cm.channel_id,
+    cm.user_id,
+    COUNT(m.id) as unread_count
+FROM channel_members cm
+LEFT JOIN read_receipts rr ON cm.channel_id = rr.channel_id AND cm.user_id = rr.user_id
+LEFT JOIN messages m ON m.channel_id = cm.channel_id
+    AND m.deleted_at IS NULL
+    AND (rr.last_read_message_id IS NULL OR m.created_at > (
+        SELECT created_at FROM messages WHERE id = rr.last_read_message_id
+    ))
+GROUP BY cm.channel_id, cm.user_id;
 
-CREATE INDEX IF NOT EXISTS idx_channel_invites_code ON channel_invites(invite_code) WHERE is_active = true;
-
--- Pinned messages
-CREATE TABLE IF NOT EXISTS pinned_messages (
-    channel_id UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-    message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    pinned_by UUID NOT NULL,
-    pinned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (channel_id, message_id)
-);
-
--- Update messages table to add channel_id if not exists
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'messages' AND column_name = 'channel_id'
-    ) THEN
-        ALTER TABLE messages ADD COLUMN channel_id UUID REFERENCES channels(id);
-    END IF;
-END $$;
-
--- Comments
-COMMENT ON TABLE channels IS 'Group communication channels with E2EE support';
-COMMENT ON TABLE channel_members IS 'Channel membership and roles';
-COMMENT ON TABLE messages IS 'Encrypted messages with thread support';
-COMMENT ON TABLE file_attachments IS 'E2EE encrypted file attachments';
-COMMENT ON COLUMN messages.content_encrypted IS 'Message content encrypted with channel/recipient key';
-COMMENT ON COLUMN file_attachments.file_key_encrypted IS 'Symmetric key for file, encrypted with message key';
+-- Active threads with reply counts
+CREATE VIEW IF NOT EXISTS active_threads AS
+SELECT
+    t.id,
+    t.channel_id,
+    t.parent_message_id,
+    t.reply_count,
+    t.participant_count,
+    t.last_reply_at,
+    m.content as parent_content,
+    m.sender_id as parent_sender
+FROM threads t
+JOIN messages m ON t.parent_message_id = m.id
+WHERE t.last_reply_at > datetime('now', '-7 days')
+ORDER BY t.last_reply_at DESC;
