@@ -1,0 +1,10 @@
+[package]
+name = "jwt-common"
+version = "0.1.0"
+edition = "2021"
+description = "Shared JWT token handling for Unhidra services"
+
+[dependencies]
+jsonwebtoken = "9.3"
+serde = { version = "1.0", features = ["derive"] }
+chrono = "0.4"

@@ -123,6 +123,7 @@ The ESP32 firmware (Phase 4) is ready and waiting for Phase 3 gateway updates. T
 - [ ] Implement binary protocol (MessagePack/protobuf) for large payloads
 
 ### Security Enhancements
+
 - [ ] Implement password change endpoint
 - [ ] Add password reset flow with secure tokens
 - [ ] Implement account lockout after failed attempts
@@ -131,6 +132,7 @@ The ESP32 firmware (Phase 4) is ready and waiting for Phase 3 gateway updates. T
 - [ ] Enable flash encryption for ESP32 (production)
 
 ### Migration Tasks
+
 - [ ] Create legacy hash migration flow
   - Detect old SHA256 hash format
   - Re-hash on successful login
