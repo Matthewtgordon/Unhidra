@@ -622,8 +622,6 @@ WantedBy=multi-user.target
 
 ---
 
----
-
 ## Kubernetes Deployment (Helm)
 
 Production Kubernetes deployment using Helm charts.

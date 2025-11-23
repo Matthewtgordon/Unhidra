@@ -192,8 +192,6 @@ Implemented secure ESP32 firmware using the modern `esp-idf-svc` ecosystem for I
 
 ---
 
----
-
 ## Phase 14: Tauri Desktop Client
 
 **Status**: ✅ Completed
