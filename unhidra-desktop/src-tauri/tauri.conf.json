@@ -1,0 +1,102 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "productName": "Unhidra",
+  "version": "0.2.0",
+  "identifier": "com.unhidra.desktop",
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Unhidra - Secure Chat",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": false,
+        "visible": true,
+        "focus": true
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/tray.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false
+    },
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "'self' wss://*.unhidra.com https://*.unhidra.com",
+        "img-src": "'self' data: https:",
+        "style-src": "'self' 'unsafe-inline'",
+        "script-src": "'self'"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Communication",
+    "shortDescription": "Enterprise Secure Chat with E2EE",
+    "longDescription": "Unhidra is an enterprise-grade secure chat platform with end-to-end encryption, OIDC SSO, WebAuthn passkeys, and IoT device integration.",
+    "copyright": "Copyright © 2025 Unhidra Team",
+    "publisher": "Unhidra",
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "wix": null,
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "icons/header.bmp",
+        "sidebarImage": "icons/sidebar.bmp"
+      }
+    },
+    "linux": {
+      "appId": "com.unhidra.desktop",
+      "category": "Network",
+      "description": "Enterprise Secure Chat with E2EE",
+      "desktop": {
+        "categories": ["Network", "InstantMessaging", "Chat"],
+        "keywords": ["chat", "secure", "e2ee", "enterprise"]
+      }
+    }
+  },
+  "plugins": {
+    "notification": {
+      "all": true
+    },
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://releases.unhidra.com/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
