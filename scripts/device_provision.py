@@ -1,3 +1,13 @@
+"""
+Interactive device provisioning utility for voice enrollment.
+
+The script records audio from a selected microphone, performs basic
+voice-activity detection to capture clean speech segments, and then
+generates speaker embeddings using SpeechBrain. It stores the resulting
+embeddings and waveform snapshots to support biometric device setup and
+verification flows.
+"""
+
 import os
 import time
 import numpy as np
