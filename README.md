@@ -5,6 +5,8 @@
 
 Lightweight modular Rust chat platform with enterprise-grade security features including End-to-End Encryption (E2EE), SSO, and IoT device support.
 
+> **Note:** v0.3.0 is a headless backend release. The production desktop client (`unhidra-desktop`) is included and functional, but not yet feature-complete (missing polish, auto-update, native notifications). Full client maturity is planned for v0.4.0.
+
 ## 🎯 Key Features
 
 - **End-to-End Encryption (E2EE)**: Double Ratchet protocol with X25519 and ChaCha20Poly1305

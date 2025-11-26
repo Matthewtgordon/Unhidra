@@ -1,11 +1,16 @@
-use axum::{Router, routing::post, routing::get, Json};
+use axum::{
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
+};
+use redis::{aio::Connection, AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::{Arc, Mutex}};
-use chrono::Utc;
+use std::env;
+use tracing::{error, info};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct AppState {
-    online: Arc<Mutex<HashMap<String, u64>>>,
+    redis: Client,
 }
 
 #[derive(Deserialize)]
@@ -19,35 +24,74 @@ struct OnlineResponse {
 }
 
 #[tokio::main]
-async fn main() {
-    let state = AppState {
-        online: Arc::new(Mutex::new(HashMap::new())),
-    };
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    let redis_url = env::var("REDIS_URL")?;
+    let redis = Client::open(redis_url)?;
+
+    let state = AppState { redis };
 
     let app = Router::new()
         .route("/presence", post(update_presence))
         .route("/online", get(get_online))
         .with_state(state);
 
-    println!("Presence service running on 0.0.0.0:3002");
+    info!("Presence service running on 0.0.0.0:3002");
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3002").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3002").await?;
+    axum::serve(listener, app).await?;
+    Ok(())
 }
 
 async fn update_presence(
     axum::extract::State(state): axum::extract::State<AppState>,
     Json(body): Json<PresenceUpdate>,
-) -> &'static str {
-    let mut map = state.online.lock().unwrap();
-    map.insert(body.user, Utc::now().timestamp() as u64);
-    "ok"
+) -> Result<&'static str, StatusCode> {
+    let mut conn = get_conn(&state).await?;
+    let key = format!("presence:{}", body.user);
+    conn.set_ex(key, "online", 30_u32)
+        .await
+        .map_err(|err| {
+            error!("failed to update presence in redis: {err}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok("ok")
 }
 
 async fn get_online(
     axum::extract::State(state): axum::extract::State<AppState>
-) -> Json<OnlineResponse> {
-    let map = state.online.lock().unwrap();
-    let users = map.keys().cloned().collect::<Vec<_>>();
-    Json(OnlineResponse { users })
+) -> Result<Json<OnlineResponse>, StatusCode> {
+    let mut conn = get_conn(&state).await?;
+
+    let keys: Vec<String> = conn
+        .scan_match("presence:*")
+        .await
+        .map_err(|err| {
+            error!("failed to scan presence keys: {err}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .collect()
+        .await;
+
+    let users = keys
+        .into_iter()
+        .filter_map(|key| key.strip_prefix("presence:").map(String::from))
+        .collect();
+
+    Ok(Json(OnlineResponse { users }))
+}
+
+async fn get_conn(state: &AppState) -> Result<Connection, StatusCode> {
+    state
+        .redis
+        .get_async_connection()
+        .await
+        .map_err(|err| {
+            error!("failed to connect to redis: {err}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
 }

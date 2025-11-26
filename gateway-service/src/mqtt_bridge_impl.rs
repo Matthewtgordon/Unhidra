@@ -32,6 +32,15 @@ pub struct MqttMessage {
     pub timestamp: u64,
 }
 
+#[cfg(feature = "mqtt-bridge")]
+#[derive(Serialize)]
+struct ChatSendRequest {
+    pub sender_id: String,
+    pub sender_name: String,
+    pub content: String,
+    pub message_type: String,
+}
+
 /// MQTT bridge configuration
 #[cfg(feature = "mqtt-bridge")]
 #[derive(Debug, Clone)]
@@ -54,6 +63,8 @@ pub struct MqttBridgeConfig {
     pub keep_alive: u64,
     /// Topic prefix for device messages
     pub topic_prefix: String,
+    /// Chat-service base URL
+    pub chat_service_url: String,
 }
 
 impl Default for MqttBridgeConfig {
@@ -68,6 +79,8 @@ impl Default for MqttBridgeConfig {
             client_key_path: None,
             keep_alive: 60,
             topic_prefix: "unhidra/devices".to_string(),
+            chat_service_url: std::env::var("CHAT_SERVICE_URL")
+                .unwrap_or_else(|_| "http://localhost:3001/api".to_string()),
         }
     }
 }
@@ -87,6 +100,8 @@ pub struct MqttBridge {
     message_rx: mpsc::UnboundedReceiver<(String, Vec<u8>)>,
     /// Configuration
     config: MqttBridgeConfig,
+    /// HTTP client for chat-service integration
+    http_client: reqwest::Client,
 }
 
 #[cfg(feature = "mqtt-bridge")]
@@ -141,6 +156,7 @@ impl MqttBridge {
 
         let (client, event_loop) = AsyncClient::new(mqttoptions, 100);
         let (message_tx, message_rx) = mpsc::unbounded_channel();
+        let http_client = reqwest::Client::new();
 
         Ok(Self {
             client,
@@ -149,6 +165,7 @@ impl MqttBridge {
             message_tx,
             message_rx,
             config,
+            http_client,
         })
     }
 
@@ -316,7 +333,60 @@ impl MqttBridge {
                 payload_len = payload.len(),
                 "Forwarding device message to chat system"
             );
-            // TODO: Integrate with ConnectionManager or chat-service gRPC
+
+            let channel_id = format!("device:{}", device_id);
+            let url = format!(
+                "{}/channels/{}/messages",
+                self.config.chat_service_url, channel_id
+            );
+
+            let body = ChatSendRequest {
+                sender_id: device_id.clone(),
+                sender_name: device_id.clone(),
+                content: String::from_utf8_lossy(&payload).to_string(),
+                message_type: "text".to_string(),
+            };
+
+            match self
+                .http_client
+                .post(&url)
+                .json(&body)
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    info!(
+                        device_id = %device_id,
+                        channel_id = %channel_id,
+                        status = %resp.status(),
+                        "Forwarded device message to chat-service",
+                    );
+                }
+                Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => {
+                    warn!(
+                        device_id = %device_id,
+                        channel_id = %channel_id,
+                        status = %resp.status(),
+                        "Channel not found in chat-service for device message",
+                    );
+                }
+                Ok(resp) => {
+                    warn!(
+                        device_id = %device_id,
+                        channel_id = %channel_id,
+                        status = %resp.status(),
+                        "Failed to forward device message to chat-service",
+                    );
+                }
+                Err(err) => {
+                    warn!(
+                        device_id = %device_id,
+                        channel_id = %channel_id,
+                        error = %err,
+                        "Error forwarding device message to chat-service",
+                    );
+                }
+            }
         }
     }
 
