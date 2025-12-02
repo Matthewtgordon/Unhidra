@@ -256,6 +256,7 @@ pub async fn add_member(
     }
 
     // Add new member
+    let role = req.role.unwrap_or_else(|| "member".to_string());
     sqlx::query!(
         r#"
         INSERT INTO channel_members (channel_id, user_id, role)
@@ -264,11 +265,19 @@ pub async fn add_member(
         "#,
         channel_id,
         req.user_id,
-        req.role.unwrap_or_else(|| "member".to_string())
+        role
     )
     .execute(&pool)
     .await
     .map_err(|e| ApiError::Database(e.to_string()))?;
+
+    // Audit log member addition
+    let audit_event = AuditEvent::new(&current_user, AuditAction::RoomJoined)
+        .with_service("chat-service")
+        .with_resource("channel", &channel_id)
+        .with_metadata("added_user_id", &req.user_id)
+        .with_metadata("role", &role);
+    let _ = audit::log(audit_event).await;
 
     Ok(StatusCode::CREATED)
 }

@@ -15,6 +15,7 @@ use serde_json::json;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
+use unhidra_core::audit::{self, AuditAction, AuditEvent, ActorType};
 use uuid::Uuid;
 
 use crate::rate_limiter::AuthRateLimiter;
@@ -128,6 +129,17 @@ pub async fn login_handler(
         Ok(t) => t,
         Err(_) => {
             warn!(username = %username, ip = %ip, "User not found");
+            // Audit log failed login
+            let username_clone = username.clone();
+            let ip_str = ip.to_string();
+            tokio::spawn(async move {
+                let audit_event = AuditEvent::new(username_clone, AuditAction::LoginFailed)
+                    .with_service("auth-api")
+                    .with_ip(ip_str)
+                    .with_metadata("reason", "user_not_found");
+                let _ = audit::log(audit_event).await;
+            });
+
             return Err((
                 StatusCode::UNAUTHORIZED,
                 Json(json!({ "error": "Invalid credentials" })),
@@ -137,6 +149,17 @@ pub async fn login_handler(
 
     if verified == 0 {
         warn!(username = %username, "User not verified");
+        // Audit log failed login
+        let username_clone = username.clone();
+        let ip_str = ip.to_string();
+        tokio::spawn(async move {
+            let audit_event = AuditEvent::new(username_clone, AuditAction::LoginFailed)
+                .with_service("auth-api")
+                .with_ip(ip_str)
+                .with_metadata("reason", "account_not_verified");
+            let _ = audit::log(audit_event).await;
+        });
+
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({ "error": "Account not verified" })),
@@ -147,6 +170,17 @@ pub async fn login_handler(
         Ok(true) => {}
         Ok(false) | Err(_) => {
             warn!(username = %username, ip = %ip, "Invalid password");
+            // Audit log failed login
+            let username_clone = username.clone();
+            let ip_str = ip.to_string();
+            tokio::spawn(async move {
+                let audit_event = AuditEvent::new(username_clone, AuditAction::LoginFailed)
+                    .with_service("auth-api")
+                    .with_ip(ip_str)
+                    .with_metadata("reason", "invalid_password");
+                let _ = audit::log(audit_event).await;
+            });
+
             return Err((
                 StatusCode::UNAUTHORIZED,
                 Json(json!({ "error": "Invalid credentials" })),
@@ -169,6 +203,17 @@ pub async fn login_handler(
     };
 
     info!(username = %username, "Login successful");
+
+    // Audit log successful login
+    let username_clone = username.clone();
+    let ip_str = ip.to_string();
+    tokio::spawn(async move {
+        let audit_event = AuditEvent::new(username_clone, AuditAction::Login)
+            .with_service("auth-api")
+            .with_ip(ip_str)
+            .with_resource("user", "user");
+        let _ = audit::log(audit_event).await;
+    });
 
     Ok(Json(json!({
         "ok": true,
@@ -269,6 +314,23 @@ pub async fn register_device_handler(
 
     info!(device_id = device_id, "Device registered successfully");
 
+    // Audit log device registration
+    let owner_id = owner_claims.sub.clone();
+    let device_id_clone = device_id.clone();
+    let device_name = payload.name.clone();
+    let device_type_str = payload.device_type.clone();
+    let ip_str = ip.to_string();
+    tokio::spawn(async move {
+        let audit_event = AuditEvent::new(owner_id, AuditAction::DeviceRegistered)
+            .with_actor_type(ActorType::User)
+            .with_service("auth-api")
+            .with_ip(ip_str)
+            .with_resource("device", device_id_clone)
+            .with_metadata("device_name", device_name)
+            .with_metadata("device_type", device_type_str);
+        let _ = audit::log(audit_event).await;
+    });
+
     Ok(Json(DeviceRegistrationResponse {
         ok: true,
         device_id,
@@ -346,6 +408,17 @@ pub async fn revoke_device_handler(
     ) {
         Ok(rows) if rows > 0 => {
             info!(device_id = payload.device_id, "Device revoked");
+            // Audit log device revocation
+            let user_id = claims.sub.clone();
+            let device_id_clone = payload.device_id.clone();
+            tokio::spawn(async move {
+                let audit_event = AuditEvent::new(user_id, AuditAction::DeviceRevoked)
+                    .with_actor_type(ActorType::User)
+                    .with_service("auth-api")
+                    .with_resource("device", device_id_clone);
+                let _ = audit::log(audit_event).await;
+            });
+
             Ok(Json(json!({ "ok": true, "message": "Device revoked" })))
         }
         _ => Err((StatusCode::NOT_FOUND, Json(json!({ "error": "Device not found" })))),
@@ -426,6 +499,18 @@ pub async fn sso_callback_handler(
         .await
         .map_err(|e| {
             warn!(provider = provider, error = %e, "SSO callback failed");
+            // Audit log SSO login failure
+            let provider_clone = provider.clone();
+            let error_msg = e.to_string();
+            tokio::spawn(async move {
+                let audit_event = AuditEvent::new("unknown", AuditAction::SsoLoginFailed)
+                    .with_actor_type(ActorType::Anonymous)
+                    .with_service("auth-api")
+                    .with_metadata("provider", provider_clone)
+                    .with_metadata("error", error_msg);
+                let _ = audit::log(audit_event).await;
+            });
+
             (
                 StatusCode::UNAUTHORIZED,
                 Json(json!({ "error": format!("SSO authentication failed: {}", e) })),
@@ -475,6 +560,19 @@ pub async fn sso_callback_handler(
     })?;
 
     info!(username = username, provider = user_info.provider, "SSO login successful");
+
+    // Audit log successful SSO login
+    let username_clone = username.clone();
+    let provider_clone = user_info.provider.clone();
+    let display_name_clone = display_name.clone();
+    tokio::spawn(async move {
+        let audit_event = AuditEvent::new(username_clone, AuditAction::SsoLogin)
+            .with_service("auth-api")
+            .with_resource("user", "user")
+            .with_metadata("provider", provider_clone)
+            .with_metadata("display_name", display_name_clone);
+        let _ = audit::log(audit_event).await;
+    });
 
     Ok(Json(json!({
         "ok": true,
@@ -545,6 +643,18 @@ pub async fn passkey_register_finish_handler(
     match state.webauthn_service.complete_registration(&payload.challenge, credential, &payload.device_name) {
         Ok(stored) => {
             info!(credential_id = stored.credential_id, "Passkey registered successfully");
+            // Audit log passkey registration
+            let user_id = stored.user_id.clone();
+            let credential_id = stored.credential_id.clone();
+            let device_name = payload.device_name.clone();
+            tokio::spawn(async move {
+                let audit_event = AuditEvent::new(user_id, AuditAction::PasskeyRegistered)
+                    .with_service("auth-api")
+                    .with_resource("passkey", credential_id)
+                    .with_metadata("device_name", device_name);
+                let _ = audit::log(audit_event).await;
+            });
+
             Ok(Json(json!({
                 "ok": true,
                 "credential_id": stored.credential_id,
@@ -615,6 +725,15 @@ pub async fn passkey_login_finish_handler(
 
             info!(user = user_id, "Passkey login successful");
 
+            // Audit log successful passkey authentication
+            let user_id_clone = user_id.clone();
+            tokio::spawn(async move {
+                let audit_event = AuditEvent::new(user_id_clone, AuditAction::PasskeyAuthenticated)
+                    .with_service("auth-api")
+                    .with_resource("user", "user");
+                let _ = audit::log(audit_event).await;
+            });
+
             Ok(Json(json!({
                 "ok": true,
                 "user": user_id,
@@ -623,6 +742,17 @@ pub async fn passkey_login_finish_handler(
         }
         Err(e) => {
             warn!(error = %e, "Passkey login finish failed");
+            // Audit log passkey authentication failure
+            let error_msg = e.to_string();
+            tokio::spawn(async move {
+                let audit_event = AuditEvent::new("unknown", AuditAction::LoginFailed)
+                    .with_actor_type(ActorType::Anonymous)
+                    .with_service("auth-api")
+                    .with_metadata("auth_method", "passkey")
+                    .with_metadata("error", error_msg);
+                let _ = audit::log(audit_event).await;
+            });
+
             Err((
                 StatusCode::UNAUTHORIZED,
                 Json(json!({ "error": format!("Authentication failed: {}", e) })),
@@ -671,6 +801,16 @@ pub async fn passkey_revoke_handler(
     match state.webauthn_service.revoke_credential(&claims.sub, &payload.credential_id) {
         Ok(()) => {
             info!(user = claims.sub, credential_id = payload.credential_id, "Passkey revoked");
+            // Audit log passkey revocation
+            let user_id = claims.sub.clone();
+            let credential_id = payload.credential_id.clone();
+            tokio::spawn(async move {
+                let audit_event = AuditEvent::new(user_id, AuditAction::PasskeyRevoked)
+                    .with_service("auth-api")
+                    .with_resource("passkey", credential_id);
+                let _ = audit::log(audit_event).await;
+            });
+
             Ok(Json(json!({ "ok": true, "message": "Passkey revoked" })))
         }
         Err(e) => {
