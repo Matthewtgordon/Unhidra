@@ -177,7 +177,9 @@ impl WebAuthnService {
             .map_err(|e| WebAuthnError::RegistrationFailed(e.to_string()))?;
 
         // Store pending registration
-        let challenge = base64_url_encode(ccr.public_key.challenge.0.as_slice());
+        // Serialize challenge to JSON string for use as key
+        let challenge = serde_json::to_string(&ccr.public_key.challenge)
+            .map_err(|e| WebAuthnError::Internal(format!("Challenge serialization failed: {}", e)))?;
         let pending = PendingRegistration {
             user_id: user_id.to_string(),
             username: username.to_string(),
@@ -268,19 +270,14 @@ impl WebAuthnService {
             return Err(WebAuthnError::CredentialNotFound);
         }
 
-        let (rcr, auth_state) = if allowed_credentials.is_empty() {
-            // Discoverable credentials flow
-            self.webauthn
-                .start_discoverable_authentication()
-                .map_err(|e| WebAuthnError::AuthenticationFailed(e.to_string()))?
-        } else {
-            self.webauthn
-                .start_passkey_authentication(&allowed_credentials)
-                .map_err(|e| WebAuthnError::AuthenticationFailed(e.to_string()))?
-        };
+        let (rcr, auth_state) = self
+            .webauthn
+            .start_passkey_authentication(&allowed_credentials)
+            .map_err(|e| WebAuthnError::AuthenticationFailed(e.to_string()))?;
 
         // Store pending authentication
-        let challenge = base64_url_encode(rcr.public_key.challenge.0.as_slice());
+        let challenge = serde_json::to_string(&rcr.public_key.challenge)
+            .map_err(|e| WebAuthnError::Internal(format!("Challenge serialization failed: {}", e)))?;
         let pending = PendingAuthentication {
             state: auth_state,
             created_at: now(),
@@ -311,7 +308,8 @@ impl WebAuthnService {
         }
 
         // Find the credential
-        let cred_id = base64_url_encode(response.id.as_slice());
+        // response.id is already a base64url-encoded string
+        let cred_id = response.id.clone();
         let mut authenticated_user_id = None;
 
         for entry in self.credentials.iter() {

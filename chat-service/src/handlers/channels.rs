@@ -59,6 +59,7 @@ pub struct ChannelResponse {
 }
 
 /// Create a new channel
+#[axum::debug_handler]
 pub async fn create_channel(
     State(pool): State<PgPool>,
     crate::auth::AuthUser(creator_id): crate::auth::AuthUser,

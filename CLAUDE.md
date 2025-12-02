@@ -92,14 +92,40 @@ tokio::spawn(async move {
 | 4 | ESP32 Firmware & WSS Integration | ✅ Complete |
 | 5 | Comprehensive Audit Logging | ✅ Complete |
 
+## Build Status (v0.3.0)
+
+### Working Services
+- ✅ **auth-api**: Builds successfully (WebAuthn API updated to 0.5)
+- ✅ **gateway-service**: Builds successfully
+- ✅ **presence-service**: Builds successfully
+- ✅ **history-service**: Builds successfully
+
+### Known Issues
+- ⚠️ **chat-service**: Requires SQLx query preparation (see `SQLX_NOTE.md`)
+  - SQLx compile-time query verification needs a running PostgreSQL database
+  - Run `cargo sqlx prepare --workspace` with DATABASE_URL set to generate query cache
+  - Or build excluding chat-service: `cargo build --workspace --exclude chat-service`
+
+### Recent Fixes (Step 3 - v0.3.0)
+1. **auth-api**: Fixed WebAuthn 0.5 API compatibility
+   - Updated Base64UrlSafeData usage (serialize challenge to JSON string)
+   - Removed deprecated `start_discoverable_authentication()` method
+   - Fixed response.id handling (already a String, not bytes)
+
+2. **Axum 0.8 Compatibility**:
+   - Removed `#[async_trait]` from `FromRequestParts` implementations (now uses native async fn in traits)
+   - Added `IntoResponse` implementation for `UnhidraError` in `unhidra-core` (gated behind `axum-integration` feature)
+
+3. **unhidra-core**: Added optional `axum-integration` feature for web framework compatibility
+
 ## Quick Reference
 
 ```bash
-# Run all backend tests
-cargo test --workspace
+# Run all backend tests (excluding chat-service)
+cargo test --workspace --exclude chat-service
 
-# Build release binaries
-cargo build --release
+# Build release binaries (excluding chat-service)
+cargo build --release --workspace --exclude chat-service
 
 # Start auth-api
 ./target/release/auth-api
@@ -109,4 +135,8 @@ cd firmware && cargo build --release
 
 # Flash ESP32 (with monitor)
 cd firmware && cargo run --release
+
+# Prepare SQLx queries (requires running PostgreSQL)
+DATABASE_URL="postgres://unhidra:password@localhost:5432/unhidra" \
+  cargo sqlx prepare --workspace
 ```

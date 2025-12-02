@@ -146,6 +146,24 @@ impl From<serde_json::Error> for UnhidraError {
     }
 }
 
+// Implement IntoResponse for axum integration (optional feature)
+#[cfg(feature = "axum-integration")]
+impl axum::response::IntoResponse for UnhidraError {
+    fn into_response(self) -> axum::response::Response {
+        use axum::{http::StatusCode, Json};
+
+        let status_code = StatusCode::from_u16(self.status_code())
+            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+        let body = Json(serde_json::json!({
+            "error": self.error_code(),
+            "message": self.to_string(),
+        }));
+
+        (status_code, body).into_response()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
