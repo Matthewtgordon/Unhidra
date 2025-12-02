@@ -13,6 +13,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use unhidra_core::{
+    audit::{self, AuditAction, AuditEvent},
     error::ApiError,
     models::Pagination,
 };
@@ -175,6 +176,15 @@ pub async fn create_thread(
 
     tx.commit().await
         .map_err(|e| ApiError::Database(e.to_string()))?;
+
+    // Audit log message sent in thread
+    let audit_event = AuditEvent::new(&user_id, AuditAction::MessageSent)
+        .with_service("chat-service")
+        .with_resource("message", &message_id)
+        .with_metadata("channel_id", &req.channel_id)
+        .with_metadata("thread_id", &thread.id)
+        .with_metadata("content_length", req.content.len());
+    let _ = audit::log(audit_event).await;
 
     Ok(Json(ThreadResponse {
         id: thread.id,
@@ -354,6 +364,14 @@ pub async fn add_thread_participant(
     .execute(&pool)
     .await
     .map_err(|e| ApiError::Database(e.to_string()))?;
+
+    // Audit log thread participant addition
+    let audit_event = AuditEvent::new(&user_id, AuditAction::RoomJoined)
+        .with_service("chat-service")
+        .with_resource("thread", &thread_id)
+        .with_metadata("added_user_id", &req.user_id)
+        .with_metadata("channel_id", &thread.channel_id);
+    let _ = audit::log(audit_event).await;
 
     Ok(StatusCode::CREATED)
 }
