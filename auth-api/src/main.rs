@@ -22,6 +22,7 @@
 //! - POST /auth/passkey/revoke - Revoke a passkey
 
 mod handlers;
+mod metrics;
 pub mod oidc;
 mod rate_limiter;
 mod services;
@@ -47,11 +48,15 @@ use handlers::{
     passkey_login_start_handler, passkey_login_finish_handler,
     passkey_list_handler, passkey_revoke_handler,
 };
+use metrics::metrics_handler;
 
 #[tokio::main]
 async fn main() {
     // Initialize tracing
     tracing_subscriber_init();
+
+    // Initialize metrics
+    metrics::init_metrics();
 
     let bind_addr = std::env::var("AUTH_BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:9200".to_string());
@@ -88,6 +93,8 @@ async fn main() {
         // Health and stats
         .route("/health", get(health_handler))
         .route("/stats", get(stats_handler))
+        // Metrics endpoint for Prometheus
+        .route("/metrics", get(metrics_handler))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive());
