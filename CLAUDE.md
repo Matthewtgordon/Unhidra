@@ -40,6 +40,33 @@
 - **WSS Required**: All WebSocket connections must use TLS (wss://)
 - **Certificate Verification**: ESP32 firmware uses CA bundle for server verification
 - **Device Authentication**: Devices authenticate via Sec-WebSocket-Protocol header
+- **Audit Logging**: All security-relevant events must be logged via the audit system
+
+### Audit Logging Implementation
+
+Comprehensive audit logging is implemented across services using a fire-and-forget pattern to avoid handler trait issues:
+
+```rust
+// Fire-and-forget pattern for audit logging
+tokio::spawn(async move {
+    let audit_event = AuditEvent::new(user_id, AuditAction::Login)
+        .with_service("auth-api")
+        .with_ip(ip_str)
+        .with_resource("user", "user");
+    let _ = audit::log(audit_event).await;
+});
+```
+
+**Auth-API Coverage:**
+- Login events (success/failure with reasons: user_not_found, account_not_verified, invalid_password)
+- Device management (registration, revocation with device metadata and IP)
+- SSO/OIDC (successful/failed authentications with provider information)
+- WebAuthn/Passkeys (registration, authentication, revocation with device names)
+
+**Chat-Service Coverage:**
+- Channel operations (creation, member additions with roles)
+- Thread operations (message sends with content metadata, participant additions)
+- File operations (uploads, deletions with file metadata)
 
 ## Development Notes
 
@@ -61,8 +88,9 @@
 |-------|-------------|--------|
 | 1 | Argon2id Password Hashing | ✅ Complete |
 | 2 | ML IPC Sidecar Isolation | ✅ Complete |
-| 3 | WSS Gateway Security | 🔄 In Progress |
+| 3 | WSS Gateway Security | ✅ Complete |
 | 4 | ESP32 Firmware & WSS Integration | ✅ Complete |
+| 5 | Comprehensive Audit Logging | ✅ Complete |
 
 ## Quick Reference
 

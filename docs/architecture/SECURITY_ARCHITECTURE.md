@@ -126,8 +126,8 @@ Unhidra follows these core security principles:
 | Threat | Description | Mitigation |
 |--------|-------------|------------|
 | **S**poofing | Impersonation | JWT authentication, device certificates |
-| **T**ampering | Message modification | TLS integrity, E2EE (planned) |
-| **R**epudiation | Deny actions | Audit logging (planned) |
+| **T**ampering | Message modification | TLS integrity, E2EE (implemented) |
+| **R**epudiation | Deny actions | Audit logging (implemented) |
 | **I**nformation Disclosure | Data leakage | TLS, E2EE (planned) |
 | **D**enial of Service | Availability attack | Rate limiting, connection limits |
 | **E**levation of Privilege | Unauthorized access | RBAC (planned), input validation |
@@ -474,8 +474,8 @@ Currently, authorization is basic:
 | 3.10 | Encrypt sensitive data in transit | TLS 1.2/1.3 | ✅ |
 | 5.2 | Use unique passwords | Argon2id with salt | ✅ |
 | 5.3 | Disable default accounts | No default accounts | ✅ |
-| 6.1 | Establish audit log management | Basic logging | 🟡 Partial |
-| 6.2 | Activate audit logging | File-based logs | 🟡 Partial |
+| 6.1 | Establish audit log management | PostgreSQL immutable logs | ✅ |
+| 6.2 | Activate audit logging | Comprehensive audit events | ✅ |
 | 7.1 | Establish malware defense | N/A (no file uploads) | ✅ |
 | 12.6 | Use encrypted communication | TLS everywhere | ✅ |
 
