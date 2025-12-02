@@ -9,6 +9,7 @@
 mod auth;
 mod db;
 mod handlers;
+mod metrics;
 mod models;
 mod state;
 
@@ -35,6 +36,9 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     tracing::info!("Chat Service starting...");
+
+    // Initialize metrics
+    metrics::init_metrics();
 
     // Initialize JWT token service
     auth::init_token_service();
@@ -84,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
     // Main app with health check (no auth required)
     let app = Router::new()
         .route("/health", get(health_check))
+        .route("/metrics", get(metrics::metrics_handler))
         .nest("/api", api_router)
         // Add middleware
         .layer(TraceLayer::new_for_http())
