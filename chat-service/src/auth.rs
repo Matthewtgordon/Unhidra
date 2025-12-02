@@ -1,6 +1,5 @@
 //! JWT authentication utilities for chat service
 
-use async_trait::async_trait;
 use axum::{
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
@@ -46,7 +45,6 @@ fn token_service() -> &'static TokenService {
 #[derive(Debug, Clone)]
 pub struct AuthUser(pub String);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for AuthUser
 where
     S: Send + Sync,
@@ -85,7 +83,6 @@ where
 #[derive(Debug, Clone)]
 pub struct OptionalAuthUser(pub Option<String>);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for OptionalAuthUser
 where
     S: Send + Sync,

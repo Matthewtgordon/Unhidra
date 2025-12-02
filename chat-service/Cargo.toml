@@ -53,7 +53,7 @@ sha2 = "0.10"
 
 # Internal crates
 proto = { path = "../proto" }
-unhidra-core = { path = "../unhidra-core" }
+unhidra-core = { path = "../unhidra-core", features = ["axum-integration"] }
 jwt-common = { path = "../jwt-common" }
 e2ee = { path = "../e2ee" }
 
